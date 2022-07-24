@@ -1,5 +1,5 @@
 # Microscenes
-Microscenes is highly experimental visual scripting solution I developed to design small gameplay sections.
+Microscenes is a highly experimental visual scripting solution I developed to design small gameplay sections.
 It relies heavily on providing controls with minimum amount of technical knowledge & fast iteration, without having to constantly create node database like Bolt forces you to.
 
 Minimum tested unity version: 2020.2.5f1
@@ -14,13 +14,13 @@ Microscene system uses 2 types of nodes:
 * Actions
 * Preconditions
 
-The main difference is how they are executed, which is explained in next picture.
+The main difference is how they are executed, which is explained in the next picture.
 
 ![](Git/Rules.png)
 ![](Git/Mixing.png)
 
 ## Creating graph
-Just add Microscene component to any GameObject and open graph using corresposing button. You can also open editor window from `Window/Microscene Graph Editor` menu. This window will automatically find Microscene component in your selection and regenerate graph. You can lock window if you don't want selection change to change graph.
+Just add Microscene component to any GameObject and open graph using corresposing button. You can also open editor window from `Window/Microscene Graph Editor` menu. This window will automatically find Microscene component in your selection and regenerate graph. You can lock the window if you don't want selection change to change graph.
 Graph is saved along with the scene, when you change target object or when closing window.
 
 ![](Git/EditorWindow.png)
@@ -80,13 +80,13 @@ public class SomePrecondition : MicroPrecondition
 
 
 ## Type Icon
-Allows to add icon to a node. You can initialize it using string 'filter', then next set of rules is applied:
+Allows to add an icon to a node. You can initialize it using string 'filter', then the next set of rules is applied:
 * If filter starts with "Assets/" or "Packages/", then icon is loaded using absolute path using  [AssetDatabase.LoadAssetAtPath\<Texture>](https://docs.unity3d.com/ScriptReference/AssetDatabase.LoadAssetAtPath.html).
 * If filter starts with "Resources/" then rest of the path is used for [Resources.Load(string)](https://docs.unity3d.com/ScriptReference/Resources.Load.html) call.</br>
 * If filter starts with t: and contains '.' symbol, icon is retrieved from type with the same name (Must match whole name including namespace)</br>
 * If filter starts with t: and <b>does not</b> contain '.', then search through types is used but only for Type.Name, first match is used to retrieve the icon. </br>
 * If type is found, then rules are the same as for intiialization with `System.Type`
-* If none of these criterias are met, icon is loaded using [EditorGUIUtility.IconContent(string)](https://docs.unity3d.com/ScriptReference/EditorGUIUtility.IconContent.html)
+* If none of these criteria are met, icon is loaded using [EditorGUIUtility.IconContent(string)](https://docs.unity3d.com/ScriptReference/EditorGUIUtility.IconContent.html)
 
 Initialization with Type works as follows:
 * If type is `MonoBehaviour` then finds `MonoScript` asset and retrieves icon from it.
@@ -106,8 +106,8 @@ class NamedAction : MicroAction, INameableNode
 ```
 
 ## Context System
-So one other thing I noticed is that microscenes can be nicely used for interactions with objects, but in this case some nodes would need additional data such as lookDirection and so on. So I made context system. Basically, any node can define `RequireContext` attribute and so it won't be available until context is given.
-To provide context you implement `IMicrosceneContextProvider` interface. If microscene finds `IMicrosceneContextProvider` component on the same game object, it will disable itself and activation will only be possible from external source. See example
+So one other thing I noticed is that microscenes can be nicely used for interactions with objects, but in this case some nodes would need additional data such as lookDirection and so on. Therefore I made context system. Basically, any node can define `RequireContext` attribute, which will make it to not be available until context request is satisfied.
+To provide context you have to implement `IMicrosceneContextProvider` interface. If microscene finds `IMicrosceneContextProvider` component on the same game object, it will disable itself and activation will only be possible from external source. See example
 
 ```csharp
 
@@ -143,8 +143,8 @@ public class InteractionDependentAction : MicroAction
 ```
 
 ## Problems
-* The fact that graph is serialized in scene means we can not have actual tree because of serialization nesting limitations which adds a lot of additional complexity, especially for generating nodes back from serialized data
-* Actions & Preconditions separation is used to have different execution logic, but sometimes you may have something like Timer node, which actually can act as both. And really nodes API is really similar, but I'm not sure how to merge these concepts just yet.
+* The fact that graph is serialized in scene means we can not have actual tree because of serialization nesting limitations which adds a lot of unwanted complexity, especially for generating nodes back from serialized data. And frankly, runtime execution code looks messy as well
+* Actions & Preconditions separation is used to have different execution logic, but sometimes you may have something like Timer node, which actually can act as both. And really, action & precondition nodes API is very similar, but I'm not sure how to merge these concepts just yet.
 * No Undo/Redo in graph view.
 * Connections to stack nodes without nodes inside are not restored when opening graph
 * Since intended for internal use, some editor code is really junky, sorry if you break your leg there :)
