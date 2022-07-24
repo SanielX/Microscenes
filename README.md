@@ -1,12 +1,12 @@
 # Microscenes
 Microscenes is a highly experimental visual scripting solution I developed to design small gameplay sections.
-It relies heavily on providing controls with minimum amount of technical knowledge & fast iteration, without having to constantly create node database like Bolt forces you to.
+Its main idea is to provide UX with minimum need for technical knowledge & fast iteration, without having to constantly update node database like Bolt forces you to.
+All graphs are stored in scene, not as scriptable objects so nodes can contain references to scene objects without any limitations.
 
 Minimum tested unity version: 2020.2.5f1
 
-**None of example nodes are presented in this package. Those rely on internal codebase and can not be easily ported. You will have to make your own node library**
-
-All graphs are stored in scene, not as scriptable objects so nodes can contain references to scene objects without any limitations.
+**None of example nodes are presented in this package. Those rely on internal codebase and can not be easily ported. You will have to make your own node library.
+The API will change in the future, no backwards compatability is guaranteed.**
 
 ![](Git/Example.png)
 
