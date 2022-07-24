@@ -1,0 +1,20 @@
+{
+    "name": "com.alexk.microscenes",
+    "version": "0.0.1",
+    "displayName": "Microscenes",
+    "description": "Graph tool for providing fast level design",
+    "unity": "2020.2",
+    "unityRelease": "5f1",
+   "keywords": [
+      "level",
+      "design",
+      "visual",
+      "scripting"
+    ],
+    "author": {
+      "name": "Alex K.",
+      "email": "one.main.two@gmail.com",
+      "url": "https://github.com/SanielX"
+    }
+  }
+  

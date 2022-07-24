@@ -1,0 +1,26 @@
+
+
+#input > .unity-label 
+{
+    top: -15px;
+    color: gray;
+}
+
+.imgui-container
+{
+    background-color: #2B2B2B;
+}
+
+.stack-output-port
+{
+    position: absolute;
+    right: -10;
+    top: 100%;
+}
+
+.stack-input-port
+{
+    position: absolute;
+    left: -10;
+    top: 100%;
+}
