@@ -2,7 +2,7 @@
 
 namespace Microscenes.Editor
 {
-    class ScriptableWrapper : ScriptableObject
+    internal class ScriptableWrapper : ScriptableObject
     {
         [SerializeReference]
         public object binding;

@@ -4,7 +4,7 @@ using UnityEngine.UIElements;
 
 namespace Microscenes.Editor
 {
-    abstract class MicrosceneStackNode<T> : StackNode, IConnectable
+    internal abstract class MicrosceneStackNode<T> : StackNode, IConnectable
     {
         protected AutoPort input, output;
         private GraphView view;

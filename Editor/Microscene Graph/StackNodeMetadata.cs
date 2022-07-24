@@ -12,7 +12,7 @@ namespace Microscenes.Editor
             if (node is ActionStackNode actionStack)
                 type = MicrosceneNodeType.Action;
             else
-                type = MicrosceneNodeType.Condition;
+                type = MicrosceneNodeType.Precondition;
 
             position = node.GetPosition().position;
         }
@@ -20,7 +20,7 @@ namespace Microscenes.Editor
         public StackNode Instantiate(GraphView view)
         {
             StackNode stackNode;
-            if(type == MicrosceneNodeType.Condition)
+            if(type == MicrosceneNodeType.Precondition)
             {
                 stackNode = new PreconditionStackNode(view);
             }

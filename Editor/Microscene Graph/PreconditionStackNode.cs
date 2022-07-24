@@ -2,7 +2,7 @@
 
 namespace Microscenes.Editor
 {
-    class PreconditionStackNode : MicrosceneStackNode<PreconditionMicrosceneNodeView>
+    internal class PreconditionStackNode : MicrosceneStackNode<PreconditionMicrosceneNodeView>
     {
         public PreconditionStackNode(GraphView view) : base(view)
         {
@@ -19,6 +19,5 @@ namespace Microscenes.Editor
         }
 
         public override string stackName => "precondition-stack-node";
-
     }
 }

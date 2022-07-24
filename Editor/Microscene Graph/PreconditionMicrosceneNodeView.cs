@@ -2,7 +2,7 @@
 
 namespace Microscenes.Editor
 {
-    class PreconditionMicrosceneNodeView : GenericMicrosceneNodeView<MicroPrecondition>
+    internal class PreconditionMicrosceneNodeView : GenericMicrosceneNodeView<MicroPrecondition>
     {
         public PreconditionMicrosceneNodeView(MicroPrecondition binding, GraphView view) : base(binding, view)
         {
@@ -10,10 +10,9 @@ namespace Microscenes.Editor
 
         protected override void CreatePorts(GraphView view, out AutoPort inputPort, out AutoPort outputPort)
         {
-            inputPort  = AutoPort.Create<Edge>(Orientation.Horizontal, UnityEditor.Experimental.GraphView.Direction.Input,  Port.Capacity.Multi, typeof(Microscene), view, true);
-            inputPort.portColor = ColorUtils.FromHEX(0x26D9D9);
+            base.CreatePorts(view, out inputPort, out outputPort);
 
-            outputPort = AutoPort.Create<Edge>(Orientation.Horizontal, UnityEditor.Experimental.GraphView.Direction.Output, Port.Capacity.Multi, typeof(Microscene), view, true);
+            inputPort.portColor = ColorUtils.FromHEX(0x26D9D9);
         }
     }
 }
