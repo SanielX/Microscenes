@@ -2,11 +2,11 @@
 
 namespace Microscenes.Editor
 {
-    class EntryMicrosceneNode : GenericMicrosceneNodeView
+    internal class EntryMicrosceneNode : GenericMicrosceneNodeView
     {
         public EntryMicrosceneNode(GraphView view) : base(view)
         {
-            capabilities &= ~(Capabilities.Deletable | Capabilities.Stackable);
+            capabilities &= ~(Capabilities.Deletable | Capabilities.Stackable | Capabilities.Copiable);
             
             base.title = "Entry";
 

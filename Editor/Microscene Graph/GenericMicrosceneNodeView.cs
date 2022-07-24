@@ -8,7 +8,7 @@ using UnityEngine.UIElements;
 
 namespace Microscenes.Editor
 {
-    class GenericMicrosceneNodeView : Node, IConnectable
+    internal class GenericMicrosceneNodeView : Node, IConnectable
     {
         public GenericMicrosceneNodeView(GraphView view) : base()
         {

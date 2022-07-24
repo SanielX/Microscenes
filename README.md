@@ -5,7 +5,7 @@ All graphs are stored in scene, not as scriptable objects so nodes can contain r
 
 Minimum tested unity version: 2020.2.5f1
 
-**None of example nodes are presented in this package. Those rely on internal codebase and can not be easily ported. You will have to make your own node library.
+**None of example nodes are presented in this package, except Empty Action node. Those rely on internal codebase and can not be easily ported. You will have to make your own node library.
 The API will change in the future, no backwards compatability is guaranteed.**
 
 ![](Git/Example.png)

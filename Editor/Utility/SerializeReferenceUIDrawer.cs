@@ -1,11 +1,9 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
 namespace Microscenes.Editor
 {
-    public class SerializeReferenceUIDrawer
+    internal class SerializeReferenceUIDrawer
     {
         public static float CalculateSPropertyHeight(SerializedProperty prop)
         {

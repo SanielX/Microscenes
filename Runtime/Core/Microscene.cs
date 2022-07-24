@@ -12,9 +12,9 @@ namespace Microscenes
         Finished
     }
 
-    public enum MicrosceneNodeType : byte
+    public enum MicrosceneNodeType : short
     {
-        Condition,
+        Precondition,
         Action
     }
 
@@ -24,15 +24,10 @@ namespace Microscenes
         [NonSerialized]
         public MicrosceneNodeState nodeState;
         public MicrosceneNodeType  nodeType;
-        public byte[]              nodeIndicies; // index into Preconditions or Actions depending on nodeType
-
+        public int[]               myNodeStack; // index into Preconditions or Actions depending on nodeType
+                                                // Usually just 1 element, but can be multiple if they are inside a stack node
         public int[]               actionConnections; // index into m_Nodes
         public int[]               branchConnections;
-    }
-
-    public interface IMicrosceneContextProvider
-    {
-        public Type MicrosceneContext { get; }
     }
 
     [DisallowMultipleComponent]
@@ -42,11 +37,11 @@ namespace Microscenes
         List<int[]> executingBranches;
 
 #if UNITY_EDITOR
-        [SerializeField] string m_MetadataJson;
+        [SerializeField] string m_MetadataJson; // This contains data about node positions, sticky notes, etc
 #endif 
 
-        [SerializeField] int[]            m_RootActions;
-        [SerializeField] int[]            m_RootBranches;
+        [SerializeField] int[]            m_RootActions;  // Connections that go from entry node
+        [SerializeField] int[]            m_RootBranches; // indexing into m_Nodes array
         [SerializeField] MicrosceneNode[] m_Nodes;
 
         [SerializeReference] MicroPrecondition[] m_MicroPreconditions;
@@ -85,20 +80,36 @@ namespace Microscenes
         }
 
         object customContextData;
+
+        /// <summary>
+        /// Starts or restarts execution of a graph
+        /// </summary>
         public void StartExecutingMicroscene(object customData)
         {
+#if UNITY_ASSERTIONS
+            if (customData != null && context is null)
+                Debug.LogWarning("Microscene has no context but is invoked with non null custom data", this);
+#endif 
             if (executingActions is null)
             {
-                executingActions  = new List<int>(1 + m_MicroActions.Length);
+                executingActions  = new List<int>  (1 + m_MicroActions.Length);
                 executingBranches = new List<int[]>(1 + m_Nodes.Length);
             }
 
             customContextData = customData;
 
-            executingActions.Clear();
+            if(IsExecutingAnyNode)
+            {
+                for (int i = 0; i < m_Nodes.Length; i++)
+                {
+                    m_Nodes[i].nodeState = MicrosceneNodeState.None;
+                }
+            }
+
+            executingActions .Clear();
             executingBranches.Clear();
 
-            executingActions.AddRange(m_RootActions);
+            executingActions .AddRange(m_RootActions);
             executingBranches.Add(m_RootBranches);
 
             enabled = true;
@@ -114,16 +125,16 @@ namespace Microscenes
 
                 // Branches are taken in packs
                 // This is basically an OR statement, first branch to be met is winning
-                // After this, all other preconditions are ignored and all connected nodes are added to the list
+                // After this, all other preconditions are ignored and all connected nodes of a winning branch are added to the list
 
                 for (int i = 0; i < branch.Length; i++)
                 {
                     ref var branchNode = ref m_Nodes[branch[i]];
-                    Assert.AreEqual(MicrosceneNodeType.Condition, branchNode.nodeType);
+                    Assert.AreEqual(MicrosceneNodeType.Precondition, branchNode.nodeType);
 
-                    if (branchNode.nodeState == MicrosceneNodeState.Finished || branchNode.nodeState == MicrosceneNodeState.None)
+                    if (branchNode.nodeState == MicrosceneNodeState.Finished | branchNode.nodeState == MicrosceneNodeState.None)
                     {
-                        foreach (var conditionIndex in branchNode.nodeIndicies)
+                        foreach (var conditionIndex in branchNode.myNodeStack)
                         {
                             var cond = m_MicroPreconditions[conditionIndex];
                             cond.Start(ctx);
@@ -134,10 +145,10 @@ namespace Microscenes
                     else
                     {
                         bool taken = true;
-                        foreach (var conditionIndex in branchNode.nodeIndicies)
+                        foreach (var conditionIndex in branchNode.myNodeStack)
                         {
                             var cond = m_MicroPreconditions[conditionIndex];
-                            taken &= cond.Update(ctx);
+                            taken   &= cond.Update(ctx);
                         }
 
                         if (taken)
@@ -164,7 +175,7 @@ namespace Microscenes
 
                     Assert.AreEqual(MicrosceneNodeType.Action, node.nodeType);
 
-                    foreach (byte connectionIndex in node.nodeIndicies)
+                    foreach (byte connectionIndex in node.myNodeStack)
                     {
                         var action = m_MicroActions[connectionIndex];
                         action.Reset(ctx);
@@ -176,7 +187,7 @@ namespace Microscenes
                 {
                     bool finished = true;
 
-                    foreach (byte connectionIndex in node.nodeIndicies)
+                    foreach (byte connectionIndex in node.myNodeStack)
                     {
                         var action = m_MicroActions[connectionIndex];
                         finished &= action.UpdateExecute(ctx);

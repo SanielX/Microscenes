@@ -8,8 +8,7 @@ namespace Microscenes.Editor
 {
     public class MicrosceneGraphWindow : EditorWindow
     {
-        IMGUIContainer objField;
-
+        IMGUIContainer      objField;
         MicrosceneGraphView graphView;
 
         [SerializeField] bool locked;
@@ -23,7 +22,6 @@ namespace Microscenes.Editor
             window.Show();
         }
 
-        
         private void OnSelectionChange()
         { 
             if (locked)
@@ -80,7 +78,7 @@ namespace Microscenes.Editor
                 else
                 {
                     @lock.image = new EditorIcon("IN LockButton@2x");
-                    OnSelectionChange();
+                    OnSelectionChange(); // Also when unlocking should check for change of target
                 }
             };
 
@@ -113,6 +111,7 @@ namespace Microscenes.Editor
             EditorApplication.playModeStateChanged += RecreateOnExitPlaymode;
         }
 
+        // When exiting play mode graph can get out of sync, since play mode changes do not save, so we regenerate it
         private void RecreateOnExitPlaymode(PlayModeStateChange change)
         {
             if (change == PlayModeStateChange.EnteredEditMode)
