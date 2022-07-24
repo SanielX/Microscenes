@@ -4,6 +4,8 @@ It relies heavily on providing controls with minimum amount of technical knowled
 
 Minimum tested unity version: 2020.2.5f1
 
+**None of example nodes are presented in this package. Those rely on internal codebase and can not be easily ported. You will have to make your own node library**
+
 All graphs are stored in scene, not as scriptable objects so nodes can contain references to scene objects without any limitations.
 
 ![](Git/Example.png)
@@ -114,7 +116,7 @@ public class InteractionData
     public Vector3 ViewDirection;
 }
 
-public class InteractableItem : MonoBehvaiour, IMicrosceneContextProvider
+public class InteractableItem : MonoBehaviour, IMicrosceneContextProvider
 {
     public Type MicrosceneContext => typeof(InteractionData);
 
