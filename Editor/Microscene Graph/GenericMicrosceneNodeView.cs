@@ -48,7 +48,8 @@ namespace Microscenes.Editor
         {
             var typeIcon = t.GetCustomAttribute<TypeIconAttribute>(inherit: true);
             if (typeIcon != null)
-            {if (typeIcon.Type is null)
+            {
+                if (typeIcon.Type is null)
                 {
                     icon = new EditorIcon(typeIcon.Name);
                 }
@@ -92,12 +93,12 @@ namespace Microscenes.Editor
 
         public Edge ConnectInputTo(IConnectable connectable)
         {
-            return ConnectInputTo(connectable.output);
+            return ((IConnectable)this).ConnectInputTo(connectable.output);
         }
 
         public Edge ConnectOutputTo(IConnectable connectable)
         {
-            return ConnectOutputTo(connectable.input);
+            return ((IConnectable)this).ConnectOutputTo(connectable.input);
         }
     }
 }

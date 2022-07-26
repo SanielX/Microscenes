@@ -2,7 +2,9 @@
     "name": "Microscenes.Editor",
     "rootNamespace": "Microscenes.Editor",
     "references": [
-        "Microscenes.Runtime"
+        "Microscenes.Runtime",
+        "STTC.Core.Editor",
+        "CLRManager"
     ],
     "includePlatforms": [
         "Editor"

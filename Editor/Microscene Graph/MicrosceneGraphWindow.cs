@@ -115,7 +115,7 @@ namespace Microscenes.Editor
         private void RecreateOnExitPlaymode(PlayModeStateChange change)
         {
             if (change == PlayModeStateChange.EnteredEditMode)
-                SetMicroscene(microscene, false);
+                graphView.GenerateMicrosceneContent(microscene, microscene.value ? new SerializedObject(microscene) : null);
         }
 
         private void OnDisable()
