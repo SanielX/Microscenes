@@ -4,10 +4,12 @@ using UnityEngine.UIElements;
 
 namespace Microscenes.Editor
 {
-    internal abstract class MicrosceneStackNode<T> : StackNode, IConnectable
+    internal abstract class MicrosceneStackNode : StackNode, IConnectable
     {
         protected AutoPort input, output;
         private GraphView view;
+
+        public abstract MicrosceneNodeType AcceptingType { get; }
 
         public Edge ConnectInputTo(IConnectable connectable)
         {
@@ -46,8 +48,8 @@ namespace Microscenes.Editor
         protected override bool AcceptsElement(GraphElement element, ref int proposedIndex, int maxIndex)
         {
             bool v = base.AcceptsElement(element, ref proposedIndex, maxIndex);
-            bool v1 = element is T;
-            return v && v1;
+            bool v1 = element is MicrosceneNodeView;
+            return v && v1 && (((MicrosceneNodeView)element).NodeTypeCapabilities & this.AcceptingType) != 0;
         }
 
         public Edge ConnectInputTo(Port p)

@@ -9,7 +9,9 @@ namespace Microscenes.Editor
         {
             float calcHeight  = 0;
 
-            var type = prop.GetValue<object>().GetType();
+            var type = prop?.GetValue<object>()?.GetType();
+            if (type is null)
+                return 0;
 
             calcHeight = defaultCalculate(prop, calcHeight);
 

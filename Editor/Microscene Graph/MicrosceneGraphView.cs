@@ -10,10 +10,6 @@ namespace Microscenes.Editor
 {
     internal class MicrosceneGraphView : AutoGraphView
     {
-        private const string STYLE_PATH = "Packages/com.alexk.microscenes/Editor/Microscene Graph/MicrosceneGraphStyles.uss";
-        private const string CONDITION_STACK_ICON_PATH = "Packages/com.alexk.microscenes/Editor/Icons/ConditionStack.png";
-        private const string ACTION_STACK_ICON_PATH    = "Packages/com.alexk.microscenes/Editor/Icons/ActionStack.png";
-        
         private Microscene scene;
         private SerializedObject serializedMicroscene;
 
@@ -21,7 +17,7 @@ namespace Microscenes.Editor
         
         public MicrosceneGraphView(EditorWindow parent) : base()
         {
-            styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(STYLE_PATH));
+            styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(MicrosceneGraphViewResources.STYLE_PATH));
 
             parentWindow = parent;
             nodeCreationRequest = CreateNode;
@@ -41,13 +37,14 @@ namespace Microscenes.Editor
 
             if (!(creationContext.target is StackNode))
             {
-                AddDerivedFrom<MicroAction>(nodesSearcher, "Actions/");
-                AddDerivedFrom<MicroPrecondition>(nodesSearcher, "Conditions/");
+                AddDerivedFrom<MicrosceneNode>(nodesSearcher, "Hybdrids/",   MicrosceneNodeType.Hybrid);
+                AddDerivedFrom<MicrosceneNode>(nodesSearcher, "Actions/",    MicrosceneNodeType.Action);
+                AddDerivedFrom<MicrosceneNode>(nodesSearcher, "Conditions/", MicrosceneNodeType.Precondition);
                 
                 nodesSearcher.AddEntry("Preconditions Stack", userData: typeof(PreconditionStackNode),
-                    icon: new EditorIcon(CONDITION_STACK_ICON_PATH));
+                    icon: new EditorIcon(MicrosceneGraphViewResources.CONDITION_STACK_ICON_PATH));
                 nodesSearcher.AddEntry("Actions Stack", userData: typeof(ActionStackNode), 
-                    icon: new EditorIcon(ACTION_STACK_ICON_PATH));
+                    icon: new EditorIcon(MicrosceneGraphViewResources.ACTION_STACK_ICON_PATH));
 
                 if(creationContext.target is null)
                 {
@@ -56,11 +53,11 @@ namespace Microscenes.Editor
             }
             else if(creationContext.target is PreconditionStackNode precondStack)
             {
-                AddDerivedFrom<MicroPrecondition>(nodesSearcher, "");
+                AddDerivedFrom<MicrosceneNode>(nodesSearcher, "", MicrosceneNodeType.Precondition);
             }
             else if(creationContext.target is ActionStackNode actionStack)
             {
-                AddDerivedFrom<MicroAction>(nodesSearcher, "");
+                AddDerivedFrom<MicrosceneNode>(nodesSearcher, "", MicrosceneNodeType.Action);
             }
 
             nodesSearcher.Build();
@@ -69,15 +66,10 @@ namespace Microscenes.Editor
                 var nodeType = entry.userData as Type;
                 Node node = null;
 
-                if (nodeType.IsSubclassOf(typeof(MicroAction)))
+                if (nodeType.IsSubclassOf(typeof(MicrosceneNode)))
                 {
-                    var action = (MicroAction)Activator.CreateInstance(nodeType);
-                    node = new ActionMicrosceneNodeView(action, this);
-                }
-                else if (nodeType.IsSubclassOf(typeof(MicroPrecondition)))
-                {
-                    var precond = (MicroPrecondition)Activator.CreateInstance(nodeType);
-                    node = new PreconditionMicrosceneNodeView(precond, this);
+                    var action = (MicrosceneNode)Activator.CreateInstance(nodeType);
+                    node = new MicrosceneNodeView(action, this);
                 }
                 else if(nodeType == typeof(ActionStackNode))
                 {
@@ -147,7 +139,7 @@ namespace Microscenes.Editor
             return createPos;
         }
 
-        void AddDerivedFrom<T>(GenericSearchBuilder builder, string prefix)
+        void AddDerivedFrom<T>(GenericSearchBuilder builder, string prefix, MicrosceneNodeType typeCapability)
         {
             var microprecondTypes = TypeCache.GetTypesDerivedFrom<T>();
             var ctxs = this.scene.context;
@@ -155,6 +147,10 @@ namespace Microscenes.Editor
             foreach (var type in microprecondTypes)
             {
                 if (type is null || type.IsAbstract)
+                    continue;
+
+                var nodeAttr = type.GetCustomAttribute<MicrosceneNodeTypeAttribute>(inherit: true);
+                if (nodeAttr is null || (nodeAttr.NodeTypeCapabilities & typeCapability) != typeCapability)
                     continue;
 
                 var requireAttr = type.GetCustomAttribute<RequireContextAttribute>();
@@ -177,7 +173,7 @@ namespace Microscenes.Editor
         public static Texture GetIconForType(Type t)
         {
             var typeIcon = t.GetCustomAttribute<TypeIconAttribute>(inherit: true);
-            if(typeIcon != null)
+            if (typeIcon != null)
             {
                 if (typeIcon.Type is null)
                 {
@@ -215,7 +211,7 @@ namespace Microscenes.Editor
             }
 
             var stackNodes    = new List<StackNode>(graphMeta.stackNodes.Count);
-            var nodeToElement = new Dictionary<(MicrosceneNodeType type, int index), GraphElement> ();
+            var nodeToElement = new Dictionary<int, GraphElement> ();
 
             // First we restore all stack nodes
             foreach (StackNodeMetadata stackMeta in graphMeta.stackNodes)
@@ -226,45 +222,33 @@ namespace Microscenes.Editor
             }
 
             // Then all nodes
-            for (int i = 0; i < scene.MicroactionsArray_Editor.Length; i++)
+            for (int i = 0; i < scene.Nodes_Editor.Length; i++)
             {
-                var microaction = scene.MicroactionsArray_Editor[i];
-                var meta        = graphMeta.actions[i];
+                var micronode = scene.Nodes_Editor[i];
+                var meta      = graphMeta.nodes[i];
 
-                var node = new ActionMicrosceneNodeView(microaction, this);
+                var node = new MicrosceneNodeView(micronode, this);
                 AddElement(node);
 
                 meta.ApplyToNode(node, stackNodes); // This adds node to a stack if needed
-                nodeToElement[(MicrosceneNodeType.Action, i)] = node; // Also remember what index corresponds to which node
+                nodeToElement[i] = node; // Also remember what index corresponds to which node
             }
 
-            for (int i = 0; i < scene.PreconditionsArray_Editor.Length; i++)
-            {
-                var precondition = scene.PreconditionsArray_Editor[i];
-                var meta         = graphMeta.preconditions[i];
-
-                var node = new PreconditionMicrosceneNodeView(precondition, this);
-                AddElement(node);
-
-                meta.ApplyToNode(node, stackNodes);
-                nodeToElement[(MicrosceneNodeType.Precondition, i)] = node;
-            }
-
-            ConnectRootNodeToItsOutputs(scene, entry, nodeToElement, scene.RootActions_Editor);
-            ConnectRootNodeToItsOutputs(scene, entry, nodeToElement, scene.RootBranch_Editor);
+            ConnectRootNodeToItsOutputs(scene, entry, nodeToElement, scene.RootActions_Editor, MicrosceneNodeType.Action);
+            ConnectRootNodeToItsOutputs(scene, entry, nodeToElement, scene.RootBranch_Editor,  MicrosceneNodeType.Precondition);
 
             // Doing same thing but now for all nodes instead of just root ones
             for (int i = 0; i < scene.AllNodes_Editor.Length; i++)
             {
-                MicrosceneNode microsceneNode = scene.AllNodes_Editor[i];
+                MicrosceneNodeData microsceneNode = scene.AllNodes_Editor[i];
                 if (microsceneNode.myNodeStack is null || microsceneNode.myNodeStack.Length == 0)
                     continue;
 
                 var targetNodeIndex = microsceneNode.myNodeStack[0];
-                var nodeViewElement = nodeToElement[(microsceneNode.nodeType, targetNodeIndex)];
+                var nodeViewElement = nodeToElement[targetNodeIndex];
 
-                ConnectNodeToItsOutputs(scene, nodeToElement, nodeViewElement, microsceneNode.actionConnections);
-                ConnectNodeToItsOutputs(scene, nodeToElement, nodeViewElement, microsceneNode.branchConnections);
+                ConnectNodeToItsOutputs(scene, nodeToElement, nodeViewElement, microsceneNode.actionConnections, MicrosceneNodeType.Action);
+                ConnectNodeToItsOutputs(scene, nodeToElement, nodeViewElement, microsceneNode.branchConnections, MicrosceneNodeType.Precondition);
             }
 
             foreach (var stickyNote in graphMeta.stickyNotes)
@@ -277,7 +261,9 @@ namespace Microscenes.Editor
             }
         }
 
-        private void ConnectRootNodeToItsOutputs(Microscene scene, EntryMicrosceneNode entry, Dictionary<(MicrosceneNodeType type, int index), GraphElement> nodeToElement, int[] rootBranch_Editor)
+        private void ConnectRootNodeToItsOutputs(Microscene scene, EntryMicrosceneNode entry, 
+                                                 Dictionary<int, GraphElement> nodeToElement, 
+                                                 int[] rootBranch_Editor, MicrosceneNodeType expectedType)
         {
             // We go through each connection
             foreach (var connectionIndex in rootBranch_Editor)
@@ -290,7 +276,10 @@ namespace Microscenes.Editor
                 // And find node it's supposed to connect to using previously generated dictionary
                 // We only need first one because if there are more nodeIndicies than one it means they are in a stack
                 // And if they are in a stack, IConnectable will connect to a stack
-                var targetElement = nodeToElement[(targetNode.nodeType, targetNode.myNodeStack[0])];
+                var targetElement = nodeToElement[targetNode.myNodeStack[0]];
+
+                if (targetElement is MicrosceneNodeView nodeView)
+                    nodeView.TrySetActualType(expectedType); // First set type then connect, otherwise ports break
 
                 if (targetElement is IConnectable c1)
                 {
@@ -299,14 +288,18 @@ namespace Microscenes.Editor
             }
         }
 
-        private void ConnectNodeToItsOutputs(Microscene scene, Dictionary<(MicrosceneNodeType type, int index), GraphElement> nodeToElement, GraphElement nodeViewElement, int[] connectionIndicies)
+        private void ConnectNodeToItsOutputs(Microscene scene, Dictionary<int, GraphElement> nodeToElement, 
+                                             GraphElement nodeViewElement, int[] connectionIndicies, MicrosceneNodeType expectedType)
         {
             if (connectionIndicies != null)
             {
                 foreach (var connectionIndex in connectionIndicies)
                 {
                     var targetNode = scene.AllNodes_Editor[connectionIndex];
-                    var targetElement = nodeToElement[(targetNode.nodeType, targetNode.myNodeStack[0])];
+                    var targetElement = nodeToElement[targetNode.myNodeStack[0]];
+
+                    if (targetElement is MicrosceneNodeView nodeView)
+                        nodeView.TrySetActualType(expectedType);
 
                     if (nodeViewElement is IConnectable c0 && targetElement is IConnectable c1)
                     {
@@ -325,9 +318,8 @@ namespace Microscenes.Editor
             graphMeta.cameraPosition = base.viewTransform.position;
             graphMeta.cameraScale    = base.viewTransform.scale;
             
-            List<MicroPrecondition> preconditions = new  List<MicroPrecondition>(16);
-            List<MicroAction>       microactions  = new  List<MicroAction>      (16);
-            List<MicrosceneNode>    nodes         = new  List<MicrosceneNode>   (16);
+            List<MicrosceneNode>     nodes    = new List<MicrosceneNode>    (16);
+            List<MicrosceneNodeData> nodeData = new List<MicrosceneNodeData>(16);
 
             Dictionary<GraphElement, int> elementToActualNode = new Dictionary<GraphElement, int>(36);
             Dictionary<int, GraphElement> nodeToOwner         = new Dictionary<int, GraphElement>(36);  // Microscene node index points to graph element that owns it (stack if multiple)
@@ -342,15 +334,10 @@ namespace Microscenes.Editor
 
                     foreach(var stackElement in stack.Children())
                     {
-                        if (stackElement is ActionMicrosceneNodeView actionNode)
+                        if (stackElement is MicrosceneNodeView actionNode)
                         {
-                            microactions.Add((MicroAction)actionNode.wrapper.binding);
-                            graphMeta.actions.Add(new MicrosceneNodeMetadata(actionNode, index)); // We remember which stack node node belongs to
-                        }
-                        else if (stackElement is PreconditionMicrosceneNodeView precondNode)
-                        {
-                            preconditions.Add((MicroPrecondition)precondNode.wrapper.binding);
-                            graphMeta.preconditions.Add(new MicrosceneNodeMetadata(precondNode, index));
+                            nodes.Add((MicrosceneNode)actionNode.wrapper.binding);
+                            graphMeta.nodes.Add(new MicrosceneNodeMetadata(actionNode, index)); // We remember which stack node node belongs to
                         }
                     }
                 }
@@ -364,15 +351,10 @@ namespace Microscenes.Editor
             EntryMicrosceneNode entryNode = null;
             foreach (var node in base.nodes.ToList())
             {
-                if(node is ActionMicrosceneNodeView actionNode && !microactions.Contains(actionNode.binding))
+                if(node is MicrosceneNodeView actionNode && !nodes.Contains(actionNode.binding))
                 {
-                    microactions.Add((MicroAction)actionNode.wrapper.binding);
-                    graphMeta.actions.Add(new MicrosceneNodeMetadata(actionNode));
-                }
-                else if(node is PreconditionMicrosceneNodeView precondNode && !preconditions.Contains(precondNode.binding))
-                {
-                    preconditions.Add((MicroPrecondition)precondNode.wrapper.binding);
-                    graphMeta.preconditions.Add(new MicrosceneNodeMetadata(precondNode));
+                    nodes.Add((MicrosceneNode)actionNode.wrapper.binding);
+                    graphMeta.nodes.Add(new MicrosceneNodeMetadata(actionNode));
                 }
                 else if(node is EntryMicrosceneNode _entryNode)
                 {
@@ -385,12 +367,12 @@ namespace Microscenes.Editor
 
             foreach (var graphElement in graphElements.ToList())
             {
-                SerializeStackNode<ActionStackNode, ActionMicrosceneNodeView, MicroAction>
-                    (microactions, nodes, elementToActualNode, 
+                SerializeStackNode<ActionStackNode, MicrosceneNodeView, MicrosceneNode>
+                    (nodes, nodeData, elementToActualNode, 
                      nodeToOwner, indicies, graphElement, MicrosceneNodeType.Action);
 
-                SerializeStackNode<PreconditionStackNode, PreconditionMicrosceneNodeView, MicroPrecondition>
-                    (preconditions, nodes, elementToActualNode,
+                SerializeStackNode<PreconditionStackNode, MicrosceneNodeView, MicrosceneNode>
+                    (nodes, nodeData, elementToActualNode,
                      nodeToOwner, indicies, graphElement, MicrosceneNodeType.Precondition);
             }
 
@@ -401,26 +383,15 @@ namespace Microscenes.Editor
                     if (elementToActualNode.ContainsKey(generic))
                         continue;
 
-                    if (generic is ActionMicrosceneNodeView actionStack)
+                    if (generic is MicrosceneNodeView nodeView)
                     {
-                        elementToActualNode[generic] = nodes.Count;
-                        nodeToOwner[nodes.Count] = generic;
+                        elementToActualNode[generic] = nodeData.Count;
+                        nodeToOwner[nodeData.Count] = generic;
 
-                        nodes.Add(new MicrosceneNode()
+                        nodeData.Add(new MicrosceneNodeData()
                         {
-                            nodeType = MicrosceneNodeType.Action,
-                            myNodeStack = new int[] { microactions.IndexOf(actionStack.binding) }
-                        });
-                    }
-                    else if (generic is PreconditionMicrosceneNodeView precondStack)
-                    {
-                        elementToActualNode[generic] = nodes.Count;
-                        nodeToOwner[nodes.Count] = generic;
-
-                        nodes.Add(new MicrosceneNode()
-                        {
-                            nodeType = MicrosceneNodeType.Precondition,
-                            myNodeStack = new int[] { preconditions.IndexOf(precondStack.binding) }
+                            nodeType    = nodeView.ActualType,
+                            myNodeStack = new int[] { nodes.IndexOf(nodeView.binding) }
                         });
                     }
                 }
@@ -435,9 +406,12 @@ namespace Microscenes.Editor
                 foreach(var connection in rootPort.connections)
                 {
                     var node = connection.input.node;
+                    if (node is null)
+                        continue;
+
                     if(elementToActualNode.TryGetValue(node, out var index))
                     {
-                        if (nodes[index].nodeType == MicrosceneNodeType.Action)
+                        if (nodeData[index].nodeType == MicrosceneNodeType.Action)
                             actionNodeConnections.Add(index);
                         else
                             branchNodeConnections.Add(index);
@@ -469,23 +443,22 @@ namespace Microscenes.Editor
 
                         if(elementToActualNode.TryGetValue(edge.input.node, out var connectionNodeIndex))
                         {
-                            if ((nodes[connectionNodeIndex].nodeType == MicrosceneNodeType.Action) && !actionNodeConnections.Contains(connectionNodeIndex))
+                            if ((nodeData[connectionNodeIndex].nodeType == MicrosceneNodeType.Action) && !actionNodeConnections.Contains(connectionNodeIndex))
                                 actionNodeConnections.Add(connectionNodeIndex);
                             else if(!branchNodeConnections.Contains(connectionNodeIndex))
                                 branchNodeConnections.Add(connectionNodeIndex);
                         }
                     }
 
-                    var node = nodes[myNodeIndex];
+                    var node = nodeData[myNodeIndex];
                     node.actionConnections = actionNodeConnections.ToArray();
                     node.branchConnections = branchNodeConnections.ToArray();
-                    nodes[myNodeIndex] = node;
+                    nodeData[myNodeIndex] = node;
                 }
             }
 
-            scene.MicroactionsArray_Editor  = microactions.ToArray();
-            scene.PreconditionsArray_Editor = preconditions.ToArray();
-            scene.AllNodes_Editor = nodes.ToArray();
+            scene.Nodes_Editor    = nodes.ToArray();
+            scene.AllNodes_Editor = nodeData.ToArray();
 
             scene.MetadataJson_Editor = EditorJsonUtility.ToJson(graphMeta, prettyPrint: true);
 
@@ -494,7 +467,7 @@ namespace Microscenes.Editor
             serializedMicroscene.ApplyModifiedProperties();
         }
 
-        private static void SerializeStackNode<TStack, TNode, TRealType>(List<TRealType> serializedNodeData, List<MicrosceneNode> nodes, 
+        private static void SerializeStackNode<TStack, TNode, TRealType>(List<TRealType> serializedNodeData, List<MicrosceneNodeData> nodes, 
                                                                          Dictionary<GraphElement, int> elementToActualNode, Dictionary<int, GraphElement> nodeToOwner, 
                                                                          List<int> indicies, GraphElement graphElement, MicrosceneNodeType nodeType)
             where TStack : StackNode
@@ -513,7 +486,7 @@ namespace Microscenes.Editor
                     elementToActualNode[n] = nodes.Count;
                 }
 
-                nodes.Add(new MicrosceneNode()
+                nodes.Add(new MicrosceneNodeData()
                 {
                     nodeType    = nodeType,
                     myNodeStack = indicies.ToArray()

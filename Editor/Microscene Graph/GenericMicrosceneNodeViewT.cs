@@ -9,8 +9,8 @@ namespace Microscenes.Editor
 {
     internal class GenericMicrosceneNodeView<T> : GenericMicrosceneNodeView, IStackListener, IConnectable, IResizable
     {
-        private IMGUIContainer imgui;
-        private StackNode      ownerStack;
+        protected IMGUIContainer imgui;
+        protected StackNode      ownerStack;
 
         /// <summary>
         /// Allows to create SerializedObject from it to easily draw SerializedReference editor!
@@ -97,13 +97,13 @@ namespace Microscenes.Editor
             outputPort = AutoPort.Create<Edge>(Orientation.Horizontal, Direction.Output, Port.Capacity.Multi, typeof(Microscene), view, true);
         }
 
-        public void OnAddedToStack(StackNode node, int index)
+        public virtual void OnAddedToStack(StackNode node, int index)
         {
             ownerStack = node;
             RemovePorts();
         }
 
-        public void OnRemovedFromStack(StackNode node)
+        public virtual void OnRemovedFromStack(StackNode node)
         {
             ownerStack = null;
             AddPorts(view);

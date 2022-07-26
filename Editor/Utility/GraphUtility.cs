@@ -149,27 +149,22 @@ namespace Microscenes.Editor
 
         public override string title { get => base.portName; set => base.portName = value; }
 
-        //
-        // Сводка:
-        //     Manipulator for creating new edges.
-        public class ActionEdgeConnector<TEdge> : EdgeConnector where TEdge : Edge, new()
+        public class AutoEdgeConnector<TEdge> : EdgeConnector where TEdge : Edge, new()
         {
-            private readonly EdgeDragHelper m_EdgeDragHelper;
+            private EdgeDragHelper dragHelper;
 
-            private Edge m_EdgeCandidate;
+            private bool    active;
+            private Edge    edgeCandidate;
+            private Vector2 mouseDownPosition;
 
-            private bool m_Active;
+            internal const float CONNECTION_DISTANCE = 10f;
 
-            private Vector2 m_MouseDownPosition;
+            public override EdgeDragHelper edgeDragHelper => dragHelper;
 
-            internal const float k_ConnectionDistanceTreshold = 10f;
-
-            public override EdgeDragHelper edgeDragHelper => m_EdgeDragHelper;
-
-            public ActionEdgeConnector(IEdgeConnectorListener listener)
+            public AutoEdgeConnector(IEdgeConnectorListener listener)
             {
-                m_EdgeDragHelper = new EdgeDragHelper<TEdge>(listener);
-                m_Active = false;
+                active = false;
+                dragHelper = new EdgeDragHelper<TEdge>(listener);
                 base.activators.Add(new ManipulatorActivationFilter
                 {
                     button = MouseButton.LeftMouse
@@ -193,142 +188,127 @@ namespace Microscenes.Editor
                 base.target.UnregisterCallback<KeyDownEvent>(OnKeyDown);
             }
 
-            protected virtual void OnMouseDown(MouseDownEvent e)
+            protected virtual void OnMouseDown(MouseDownEvent evt)
             {
-                if (m_Active)
+                if (active)
                 {
-                    e.StopImmediatePropagation();
+                    evt.StopImmediatePropagation();
                 }
                 else
                 {
-                    if (!CanStartManipulation(e))
+                    if (CanStartManipulation(evt))
                     {
-                        return;
-                    }
-
-                    Port port = base.target as Port;
-                    if (port != null)
-                    {
-                        m_MouseDownPosition = e.localMousePosition;
-                        var portConnections = port.connections;
-
-                        // if (port.direction == Direction.Input && portConnections.Count() > 0)
-                        // {
-                        //     m_EdgeCandidate = portConnections.First();
-                        // 
-                        //     m_EdgeCandidate.input?.DisconnectAll();
-                        //     m_EdgeCandidate.input?.node.RefreshPorts();
-                        // 
-                        //     m_EdgeCandidate.output?.DisconnectAll();
-                        //     m_EdgeCandidate.output?.node.RefreshPorts();
-                        // 
-                        //     m_EdgeCandidate = new TEdge();
-                        //     m_EdgeDragHelper.draggedPort = m_EdgeCandidate.output;
-                        // }
-                        // else
-                        // {
-                        m_EdgeCandidate = new TEdge();
-                        m_EdgeDragHelper.draggedPort = port;
-                        // }
-
-                        m_EdgeDragHelper.edgeCandidate = m_EdgeCandidate;
-                        if (m_EdgeDragHelper.HandleMouseDown(e))
+                        Port port = base.target as Port;
+                        if (port != null)
                         {
-                            m_Active = true;
-                            base.target.CaptureMouse();
-                            e.StopPropagation();
-                        }
-                        else
-                        {
-                            m_EdgeDragHelper.Reset();
-                            m_EdgeCandidate = null;
+                            mouseDownPosition = evt.localMousePosition;
+                            
+                            // if (port.direction == Direction.Input && portConnections.Count() > 0)
+                            // {
+                            //     m_EdgeCandidate = portConnections.First();
+                            // 
+                            //     m_EdgeCandidate.input?.DisconnectAll();
+                            //     m_EdgeCandidate.input?.node.RefreshPorts();
+                            // 
+                            //     m_EdgeCandidate.output?.DisconnectAll();
+                            //     m_EdgeCandidate.output?.node.RefreshPorts();
+                            // 
+                            //     m_EdgeCandidate = new TEdge();
+                            //     m_EdgeDragHelper.draggedPort = m_EdgeCandidate.output;
+                            // }
+                            // else
+                            // {
+
+                            edgeCandidate = new TEdge();
+                            dragHelper.draggedPort = port;
+
+                            dragHelper.edgeCandidate = edgeCandidate;
+                            if (dragHelper.HandleMouseDown(evt))
+                            {
+                                active = true;
+
+                                base.target.CaptureMouse();
+                                evt.StopPropagation();
+                            }
+                            else
+                            {
+                                dragHelper.Reset();
+                                edgeCandidate = null;
+                            }
                         }
                     }
                 }
             }
 
-            private void OnCaptureOut(MouseCaptureOutEvent e)
+            private void OnCaptureOut(MouseCaptureOutEvent evt)
             {
-                m_Active = false;
-                if (m_EdgeCandidate != null)
+                active = false;
+                if (edgeCandidate != null)
+                    AbortConnectingOperation();
+            }
+
+            protected virtual void OnMouseMove(MouseMoveEvent evt)
+            {
+                if (active)
                 {
-                    Abort();
+                    dragHelper.HandleMouseMove(evt);
+                    edgeCandidate.candidatePosition = evt.mousePosition;
+                    edgeCandidate.UpdateEdgeControl();
+                    evt.StopPropagation();
                 }
             }
 
-            protected virtual void OnMouseMove(MouseMoveEvent e)
+            protected virtual void OnMouseUp(MouseUpEvent evt)
             {
-                if (m_Active)
+                if (active && CanStopManipulation(evt))
                 {
-                    m_EdgeDragHelper.HandleMouseMove(e);
-                    m_EdgeCandidate.candidatePosition = e.mousePosition;
-                    m_EdgeCandidate.UpdateEdgeControl();
-                    e.StopPropagation();
-                }
-            }
-
-            protected virtual void OnMouseUp(MouseUpEvent e)
-            {
-                if (m_Active && CanStopManipulation(e))
-                {
-                    if (CanPerformConnection(e.localMousePosition))
-                    {
-                        m_EdgeDragHelper.HandleMouseUp(e);
-                    }
+                    if (Vector2.Distance(mouseDownPosition, evt.localMousePosition) > CONNECTION_DISTANCE)
+                        dragHelper.HandleMouseUp(evt);
                     else
-                    {
-                        Abort();
-                    }
+                        AbortConnectingOperation();
 
-                    m_Active = false;
-                    m_EdgeCandidate = null;
+                    active = false;
+                    edgeCandidate = null;
                     base.target.ReleaseMouse();
-                    e.StopPropagation();
+                    evt.StopPropagation();
                 }
             }
 
-            private void OnKeyDown(KeyDownEvent e)
+            private void OnKeyDown(KeyDownEvent evt)
             {
-                if (e.keyCode == KeyCode.Escape && m_Active)
+                if (evt.keyCode == KeyCode.Escape && active)
                 {
-                    Abort();
-                    m_Active = false;
+                    AbortConnectingOperation();
+                    active = false;
                     base.target.ReleaseMouse();
-                    e.StopPropagation();
+                    evt.StopPropagation();
                 }
             }
 
-            private void Abort()
+            private void AbortConnectingOperation()
             {
-                (base.target?.GetFirstAncestorOfType<GraphView>())?.RemoveElement(m_EdgeCandidate);
-                m_EdgeCandidate.input = null;
-                m_EdgeCandidate.output = null;
-                m_EdgeCandidate = null;
-                m_EdgeDragHelper.Reset();
-            }
-
-            private bool CanPerformConnection(Vector2 mousePosition)
-            {
-                return Vector2.Distance(m_MouseDownPosition, mousePosition) > 10f;
+                (base.target?.GetFirstAncestorOfType<GraphView>())?.RemoveElement(edgeCandidate);
+                edgeCandidate.input = null;
+                edgeCandidate.output = null;
+                edgeCandidate = null;
+                dragHelper.Reset();
             }
         }
 
-        private class DefaultEdgeConnectorListener : IEdgeConnectorListener
+        private class AutoEdgeConnectorListener : IEdgeConnectorListener
         {
             public bool createIfNone;
             public GraphView view;
 
-            private GraphViewChange m_GraphViewChange;
+            private GraphViewChange    graphViewChange;
+            private List<Edge>         edgesToCreate;
+            private List<GraphElement> edgesToDelete;
 
-            private List<Edge> m_EdgesToCreate;
-
-            private List<GraphElement> m_EdgesToDelete;
-
-            public DefaultEdgeConnectorListener()
+            public AutoEdgeConnectorListener()
             {
-                m_EdgesToCreate = new List<Edge>();
-                m_EdgesToDelete = new List<GraphElement>();
-                m_GraphViewChange.edgesToCreate = m_EdgesToCreate;
+                edgesToCreate = new List<Edge>();
+                edgesToDelete = new List<GraphElement>();
+                graphViewChange.edgesToCreate = edgesToCreate;
             }
 
             public void OnDropOutsidePort(Edge edge, Vector2 position)
@@ -349,16 +329,16 @@ namespace Microscenes.Editor
 
             public void OnDrop(GraphView graphView, Edge edge)
             {
-                m_EdgesToCreate.Clear();
-                m_EdgesToCreate.Add(edge);
-                m_EdgesToDelete.Clear();
+                this.edgesToCreate.Clear();
+                this.edgesToCreate.Add(edge);
+                edgesToDelete.Clear();
                 if (edge.input.capacity == Capacity.Single)
                 {
                     foreach (Edge connection in edge.input.connections)
                     {
                         if (connection != edge)
                         {
-                            m_EdgesToDelete.Add(connection);
+                            edgesToDelete.Add(connection);
                         }
                     }
                 }
@@ -369,20 +349,20 @@ namespace Microscenes.Editor
                     {
                         if (connection2 != edge)
                         {
-                            m_EdgesToDelete.Add(connection2);
+                            edgesToDelete.Add(connection2);
                         }
                     }
                 }
 
-                if (m_EdgesToDelete.Count > 0)
+                if (edgesToDelete.Count > 0)
                 {
-                    graphView.DeleteElements(m_EdgesToDelete);
+                    graphView.DeleteElements(edgesToDelete);
                 }
 
-                List<Edge> edgesToCreate = m_EdgesToCreate;
+                List<Edge> edgesToCreate = this.edgesToCreate;
                 if (graphView.graphViewChanged != null)
                 {
-                    edgesToCreate = graphView.graphViewChanged(m_GraphViewChange).edgesToCreate;
+                    edgesToCreate = graphView.graphViewChanged.Invoke(graphViewChange).edgesToCreate;
                 }
 
                 foreach (Edge item in edgesToCreate)
@@ -402,15 +382,15 @@ namespace Microscenes.Editor
         public static AutoPort Create<TEdge>(Orientation orientation, Direction direction, Capacity capacity,
                                                        Type type, GraphView view, bool createIfNone) where TEdge : Edge, new()
         {
-            DefaultEdgeConnectorListener listener = new DefaultEdgeConnectorListener();
+            AutoEdgeConnectorListener listener = new AutoEdgeConnectorListener();
             listener.view = view;
             listener.createIfNone = createIfNone;
 
             AutoPort port = new AutoPort(orientation, direction, capacity, type)
             {
-                m_EdgeConnector = new ActionEdgeConnector<TEdge>(listener),
-
+                m_EdgeConnector = new AutoEdgeConnector<TEdge>(listener),
             };
+
             port.AddManipulator(port.m_EdgeConnector);
             port.view = view;
             port.portName = "";

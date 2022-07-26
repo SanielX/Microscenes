@@ -2,7 +2,7 @@
 
 namespace Microscenes.Editor
 {
-    internal class ActionStackNode : MicrosceneStackNode<ActionMicrosceneNodeView>
+    internal class ActionStackNode : MicrosceneStackNode
     {
         public ActionStackNode(GraphView view) : base(view)
         {
@@ -18,5 +18,7 @@ namespace Microscenes.Editor
         }
 
         public override string stackName => "action-stack-node";
+
+        public override MicrosceneNodeType AcceptingType => MicrosceneNodeType.Action;
     }
 }
