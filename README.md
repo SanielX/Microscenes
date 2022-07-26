@@ -5,19 +5,21 @@ All graphs are stored in scene, not as scriptable objects so nodes can contain r
 
 Minimum tested unity version: 2020.2.5f1
 
-**None of example nodes are presented in this package, except Empty Action node. Those rely on internal codebase and can not be easily ported. You will have to make your own node library.
+**Icons shown in examples are not available in this package. You can find example nodes in `Runtime/Example Nodes` directory.
 The API will change in the future, no backwards compatability is guaranteed.**
 
 ![](Git/Example.png)
 
-Microscene system uses 2 types of nodes:
-* Actions
-* Preconditions
+Microscene system is designed for linear games and has 2 types of nodes, based on the next observation:
+- Game waits for player to do something, hence Precondition nodes
+- Game responds to completed condition with an action (playing animation, etc)
 
-The main difference is how they are executed, which is explained in the next picture.
+Thus, a node can be either an action or a precondition. Main difference is how they are executed, which is explained in the next picture.
 
 ![](Git/Rules.png)
 ![](Git/Mixing.png)
+
+Node can also support being both action and precondition. Such nodes are called "hybdrid" nodes.
 
 ## Creating graph
 Just add Microscene component to any GameObject and open graph using corresposing button. You can also open editor window from `Window/Microscene Graph Editor` menu. This window will automatically find Microscene component in your selection and regenerate graph. You can lock the window if you don't want selection change to change graph.
@@ -36,44 +38,65 @@ You node will be available in Create Node dropdown automatically.
 
 using Microscenes;
 
-[SerializeReferencePath("MyNodes/Wait Action")] // Allows to specify path to node,
-                                                // If this attribute is missing, class name is used
-[TypeIcon("Assets/Icons/WaitActionIcon.png")]   // Can be used to add icon to a node, see Type Icon for more info
-public class WaitAction : MicroAction
+[MicrosceneNodeType(MicrosceneNodeType.Action)]  // Specify if node is action, precondition or hybrid
+// This is small enum which will unfold into "Abstract/Empty" path
+// You may as well just use path as an argument
+[SerializeReferencePath(SRPathType.Abstract, "Empty")] 
+internal class EmptyActionNode : MicrosceneNode
+{
+    protected override void OnStart(in MicrosceneContext ctx)
+    {
+        Complete(); // Marks node as completed so graph can move forward
+    }
+}
+
+// Example of checking condition every frame
+[MicrosceneNodeType(MicrosceneNodeType.Precondition)]
+[SerializeReferencePath(SRPathType.Abstract, "Scene Is Loaded")]
+public class SceneIsLoaded : MicrosceneNode
+{
+    [SerializeField] string m_SceneName;
+    protected override void OnUpdate(in MicrosceneContext ctx)
+    {
+        ResetState(); // Clear result of previous frame
+        for (int i = 0; i < SceneManager.sceneCount; i++)
+        {
+            // Condition will be true every frame where we have scene with 
+            // some name loaded
+            if(SceneManager.GetSceneAt(i).name == m_SceneName)
+            {
+                Complete(); // Set condition as satisfied for this frame
+                break;
+            }
+        }
+    }
+}
+
+// Example of a hybdrid node
+// Waiting may be treated as action but also you might want to have condition
+// E.g. "5 seconds pass or player entered trigger"
+// But as an action, you might want to chain it "start animation then wait 1 sec"
+// In graph view, hybrid node can be placed in any stack 
+// You can also change its type by using context menu
+[MicrosceneNodeType(MicrosceneNodeType.Hybrid)]
+[SerializeReferencePath(SRPathType.Abstract, "Wait")]
+public class WaitHybdridNode : MicrosceneNode, INameableNode // INameableNodeis explained below
 {
     float timer;
-    [SerializeField, Min(0)] float m_Time;
-
-    // Microscene context contains data about the caller (Microscene component)
-    // and user data object that can come from context (see Context System)
-    public override void OnStartExecute(in MicrosceneContext ctx)
+    [SerializeField, Min(0)] float m_WaitTime = 1f;
+    protected override void OnStart(in MicrosceneContext ctx)
     {
         timer = 0;
     }
-
-    public override void OnUpdateExecute(in MicrosceneContext ctx)
+    protected override void OnUpdate(in MicrosceneContext ctx)
     {
         timer += Time.deltaTime;
-        if(timer >= m_Time)
-            Complete(); // Call this to stop execution of a node
+        if (timer >= m_WaitTime)
+            Complete();
     }
-
-    // Also both Action and Precondition have OnValidate method
-}
-
-public class SomePrecondition : MicroPrecondition
-{
-    bool pass;
-    [SerializeField] float m_Chance = 0.5f;
-
-    public override void Start(in MicrosceneContext ctx)
+    public string GetNiceNameString()
     {
-        pass = Random.Range(0f, 1f) < m_Chance;
-    }
-
-    public override bool Update(in MicrosceneContext ctx)
-    {
-        return pass;
+        return m_WaitTime == 1f ? "Wait 1 second" : $"Wait {m_WaitTime} seconds";
     }
 }
 ```
@@ -144,8 +167,9 @@ public class InteractionDependentAction : MicroAction
 
 ## Problems
 * The fact that graph is serialized in scene means we can not have actual tree because of serialization nesting limitations which adds a lot of unwanted complexity, especially for generating nodes back from serialized data. And frankly, runtime execution code looks messy as well
-* Actions & Preconditions separation is used to have different execution logic, but sometimes you may have something like Timer node, which actually can act as both. And really, action & precondition nodes API is very similar, but I'm not sure how to merge these concepts just yet.
 * No Undo/Redo in graph view.
 * Connections to stack nodes without nodes inside are not restored when opening graph
 * Since intended for internal use, some editor code is really junky, sorry if you break your leg there :)
+* Appearently, graph view is going to get [deprecated](https://forum.unity.com/threads/graph-tool-foundation.1057667/page-2#post-8098055). Great =)
+* Search window in graph view is not very good and repeats some entries on search
 
