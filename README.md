@@ -3,7 +3,7 @@ Microscenes is a highly experimental visual scripting solution I developed to de
 Its main idea is to provide UX with minimum need for technical knowledge & fast iteration, without having to constantly update node database like Bolt forces you to.
 All graphs are stored in scene, not as scriptable objects so nodes can contain references to scene objects without any limitations.
 
-Minimum tested unity version: 2020.2.5f1
+Minimum supported unity version: 2020.2.5f1
 
 **Icons shown in examples are not available in this package. You can find example nodes in `Runtime/Example Nodes` directory.
 The API will change in the future, no backwards compatability is guaranteed.**
@@ -53,12 +53,17 @@ internal class EmptyActionNode : MicrosceneNode
 // Example of checking condition every frame
 [MicrosceneNodeType(MicrosceneNodeType.Precondition)]
 [SerializeReferencePath(SRPathType.Abstract, "Scene Is Loaded")]
-public class SceneIsLoaded : MicrosceneNode
+public class SceneIsLoadedNode : MicrosceneNode
 {
     [SerializeField] string m_SceneName;
     protected override void OnUpdate(in MicrosceneContext ctx)
     {
         ResetState(); // Clear result of previous frame
+        // This way condition will be rechecked every frame. If you want to check for condition once and not clear result
+        // You can do 
+        // if(base.State == MicrosceneNodeState.Finished)
+        //    return;
+        
         for (int i = 0; i < SceneManager.sceneCount; i++)
         {
             // Condition will be true every frame where we have scene with 
@@ -80,7 +85,7 @@ public class SceneIsLoaded : MicrosceneNode
 // You can also change its type by using context menu
 [MicrosceneNodeType(MicrosceneNodeType.Hybrid)]
 [SerializeReferencePath(SRPathType.Abstract, "Wait")]
-public class WaitHybdridNode : MicrosceneNode, INameableNode // INameableNodeis explained below
+public class WaitHybdridNode : MicrosceneNode, INameableNode // for INameableNode explanation see Dynamic Node Name
 {
     float timer;
     [SerializeField, Min(0)] float m_WaitTime = 1f;
@@ -103,7 +108,7 @@ public class WaitHybdridNode : MicrosceneNode, INameableNode // INameableNodeis 
 
 
 ## Type Icon
-Allows to add an icon to a node. You can initialize it using string 'filter', then the next set of rules is applied:
+`TypeIconAttribute` allows to add an icon to a node. You can initialize it using string 'filter', then the next set of rules is applied:
 * If filter starts with "Assets/" or "Packages/", then icon is loaded using absolute path using  [AssetDatabase.LoadAssetAtPath\<Texture>](https://docs.unity3d.com/ScriptReference/AssetDatabase.LoadAssetAtPath.html).
 * If filter starts with "Resources/" then rest of the path is used for [Resources.Load(string)](https://docs.unity3d.com/ScriptReference/Resources.Load.html) call.</br>
 * If filter starts with t: and contains '.' symbol, icon is retrieved from type with the same name (Must match whole name including namespace)</br>
@@ -117,7 +122,8 @@ Initialization with Type works as follows:
 * If type is built in unity type, then `AssetPreview.GetMiniTypeThumbnail(Type)` is used
 
 ## Dynamic node name
-Just implement `INameableNode` interface.
+Just implement `INameableNode` interface. This will make graph view will set node name to whetever GetNiceNameString returns.
+Rich text is supported.
 ```csharp
 class NamedAction : MicroAction, INameableNode
 {
@@ -172,4 +178,5 @@ public class InteractionDependentAction : MicroAction
 * Since intended for internal use, some editor code is really junky, sorry if you break your leg there :)
 * Appearently, graph view is going to get [deprecated](https://forum.unity.com/threads/graph-tool-foundation.1057667/page-2#post-8098055). Great =)
 * Search window in graph view is not very good and repeats some entries on search
+* No loops
 
