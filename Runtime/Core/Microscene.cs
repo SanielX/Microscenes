@@ -75,10 +75,13 @@ namespace Microscenes
                 return null;
             }
         }
-
+        
+        /// <summary>
+        /// Returns true if component is enabled and microscene has any nodes that are executed at the moment
+        /// </summary>
         public bool IsExecutingAnyNode
         {
-            get => executingActions.Count > 0 || executingBranches.Count > 0;
+            get => (executingActions is null || executingBranches is null || executingActions.Count > 0 || executingBranches.Count > 0) && enabled;
         }
 
         void Start()
@@ -123,9 +126,12 @@ namespace Microscenes
 
             executingActions .Clear();
             executingBranches.Clear();
-
-            executingActions.AddRange(m_RootActions);
-            executingBranches.Add(m_RootBranches);
+            
+            if(m_RootActions != null && m_RootActions.Length > 0) // Otherwise adds empty array which breaks IsExecutingAnyNode
+                executingActions.AddRange(m_RootActions);
+            
+            if(m_RootBranches != null && m_RootBranches.Length > 0)
+                executingBranches.Add(m_RootBranches);
 
             enabled = true;
         }
