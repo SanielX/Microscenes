@@ -1,42 +1,96 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using UnityEditor;
 using UnityEditor.Experimental.GraphView;
+using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace Microscenes.Editor
 {
-    internal abstract class MicrosceneStackNode : StackNode, IConnectable
+    internal class MicrosceneStackNode : StackNode, IConnectable
     {
         protected AutoPort input, output;
         private GraphView view;
+        
+        public ScriptableWrapper wrapper;
+        
+        public MicrosceneStackConnectionType ConnectionType { get; }
+        
+        public int NodeID { get; set; }
+        
+        /// <summary>
+        /// Update on GeometryChangedEvent but never contains NaN values which will hopefully fix random losses of data
+        /// </summary>
+        public Rect NodePosition { get; set; }
 
-        public abstract MicrosceneNodeType AcceptingType { get; }
-
-        public Edge ConnectInputTo(IConnectable connectable)
+        public MicrosceneStackNode(MicrosceneStackBehaviour stackBehaviour, GraphView view) : base()
         {
-            return ConnectInputTo(connectable.output);
-        }
-
-        public Edge ConnectOutputTo(IConnectable connectable)
-        {
-            return ConnectOutputTo(connectable.input);
-        }
-
-        public MicrosceneStackNode(GraphView view) : base()
-        {
+            wrapper = ScriptableObject.CreateInstance<ScriptableWrapper>();
+            wrapper.binding = stackBehaviour;
+            
             this.view = view;
+            
+            string path;
+            var attr = stackBehaviour.GetType().GetCustomAttribute<SerializeReferencePathAttribute>();
+            if (attr is null)
+            {
+                path = ObjectNames.NicifyVariableName(stackBehaviour.GetType().Name);
+            }
+            else
+                path = attr.Path;
+            
+            var stackTypeAttr = stackBehaviour.GetType().GetCustomAttribute<MicrosceneStackBehaviourAttribute>();
+            ConnectionType = stackTypeAttr.Type;
 
-            name = stackName;
             titleElement = new Label();
             titleElement.AddToClassList("unity-label");
+            
+            title = path[(path.LastIndexOf('/')+1)..^0];
+            title = title.Replace("Stack", "", StringComparison.OrdinalIgnoreCase).Trim();
+            
+            tooltip = stackTypeAttr.Tooltip;
 
             inputContainer.Add(titleElement);
             CreatePorts(view);
 
             output.AddToClassList("stack-output-port");
-            input.AddToClassList("stack-input-port");
+            input .AddToClassList("stack-input-port");
 
             inputContainer.Add(input);
-            inputContainer.Add(output);
+            
+            if(ConnectionType == MicrosceneStackConnectionType.SingleOutput)
+                inputContainer.Add(output);
+            
+            RegisterCallback<GeometryChangedEvent>(OnGeometryChanged);
+        }
+
+        private void OnGeometryChanged(GeometryChangedEvent evt)
+        {
+            var newRect = evt.newRect;
+            if (float.IsNaN(newRect.size.x) || float.IsNaN(newRect.size.y))
+            {
+                return;
+            }
+            
+            NodePosition = newRect;
+        }
+
+        IEnumerable<IConnectable> IConnectable.Children
+        {
+            get
+            {
+                if(ConnectionType == MicrosceneStackConnectionType.MultipleOutput)
+                    return base.Children().Select((child) => child as IConnectable).Where(c => c is not null);
+                else 
+                    return new[] { this };
+            }
+        }
+
+        public Edge ConnectOutputTo(IConnectable connectable)
+        {
+            return ConnectOutputTo(connectable.input);
         }
 
         protected virtual void CreatePorts(GraphView view)
@@ -48,8 +102,11 @@ namespace Microscenes.Editor
         protected override bool AcceptsElement(GraphElement element, ref int proposedIndex, int maxIndex)
         {
             bool v = base.AcceptsElement(element, ref proposedIndex, maxIndex);
-            bool v1 = element is MicrosceneNodeView;
-            return v && v1 && (((MicrosceneNodeView)element).NodeTypeCapabilities & this.AcceptingType) != 0;
+            var v1 = element as MicrosceneNodeView;
+            if(v1 is not null && !v1.wrapper)
+                return false;
+            
+            return v && v1 is not null;
         }
 
         public Edge ConnectInputTo(Port p)
@@ -70,7 +127,7 @@ namespace Microscenes.Editor
         Label titleElement;
         public override string title { get => titleElement.text; set => titleElement.text = value; }
         public new string tooltip { get => titleElement.tooltip; set => titleElement.tooltip = value; }
-        public abstract string stackName { get; }
+        
         Port IConnectable.input  => input;
         Port IConnectable.output => output;
     }

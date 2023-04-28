@@ -1,31 +1,33 @@
 # Microscenes
 Microscenes is a highly experimental visual scripting solution I developed to design small gameplay sections.
 Its main idea is to provide UX with minimum need for technical knowledge & fast iteration, without having to constantly update node database like Bolt forces you to.
-All graphs are stored in scene, not as scriptable objects so nodes can contain references to scene objects without any limitations.
+All graphs are stored in scene, not as scriptable objects so nodes can contain references to scene objects without any limitations. Though if you
+need to save graph to asset you can always use prefabs or presets.
 
-Minimum supported unity version: 2020.2.5f1
+Please note that this is **not** one of designer-only visual scripting solutions, 
+this one is actually pretty programmer oriented and will require you to write custom nodes yourself.
+
+Minimum supported unity version: 2021.3
 
 **Icons shown in examples are not available in this package. You can find example nodes in `Runtime/Example Nodes` directory.
 The API will change in the future, no backwards compatability is guaranteed.**
 
-![](Git/Example.png)
+![](Git~/Example.png)
 
-Microscene system is designed for linear games and has 2 types of nodes, based on the next observation:
-- Game waits for player to do something, hence Precondition nodes
-- Game responds to completed condition with an action (playing animation, etc)
+Microscene system is designed for linear games that have pretty defined order of events, though I don't see much of a problem in using them elsewhere.
+The idea behind this system is very simple can is described in following pictures.
 
-Thus, a node can be either an action or a precondition. Main difference is how they are executed, which is explained in the next picture.
+![](Git~/Rules.png)
+![](Git~/WeirdRule.png)
 
-![](Git/Rules.png)
-![](Git/Mixing.png)
-
-Node can also support being both action and precondition. Such nodes are called "hybdrid" nodes.
+Basically, you should make nodes that are suitable for your game and are abstract enough that you can describe what they do
+in one actual sentence like "Wait until player is in trigger".
 
 ## Creating graph
-Just add Microscene component to any GameObject and open graph using corresposing button. You can also open editor window from `Window/Microscene Graph Editor` menu. This window will automatically find Microscene component in your selection and regenerate graph. You can lock the window if you don't want selection change to change graph.
+Just add Microscene component to any GameObject and open graph using corresponding button. You can also open editor window from `Window/Microscene Graph Editor` menu. This window will automatically find Microscene component in your selection and regenerate graph. You can lock the window if you don't want selection change to change graph.
 Graph is saved along with the scene, when you change target object or when closing window.
 
-![](Git/EditorWindow.png)
+![](Git~/EditorWindow.png)
 
 Graph is then executed as soon as component is enabled in `LateUpdate()`.
 
@@ -38,74 +40,113 @@ You node will be available in Create Node dropdown automatically.
 
 using Microscenes;
 
-[MicrosceneNodeType(MicrosceneNodeType.Action)]  // Specify if node is action, precondition or hybrid
-// This is small enum which will unfold into "Abstract/Empty" path
-// You may as well just use path as an argument
-[SerializeReferencePath(SRPathType.Abstract, "Empty")] 
-internal class EmptyActionNode : MicrosceneNode
+[System.Serializable]                                  // Required by unity
+[MicrosceneNode("Useful tooltip")]                     // Mark node to make it visible in graph window
+[SerializeReferencePath(SRPathType.Abstract, "Empty")] // Enum is a shortcut to make folders, you can skip
+                                                       // this attribute if you don't want custom path in node explorer
+public class EmptyAction : MicrosceneNode
 {
     protected override void OnStart(in MicrosceneContext ctx)
     {
-        Complete(); // Marks node as completed so graph can move forward
+        Complete();
     }
 }
 
 // Example of checking condition every frame
-[MicrosceneNodeType(MicrosceneNodeType.Precondition)]
-[SerializeReferencePath(SRPathType.Abstract, "Scene Is Loaded")]
-public class SceneIsLoadedNode : MicrosceneNode
-{
-    [SerializeField] string m_SceneName;
-    protected override void OnUpdate(in MicrosceneContext ctx)
-    {
-        ResetState(); // Clear result of previous frame
-        // This way condition will be rechecked every frame. If you want to check for condition once and not clear result
-        // You can do 
-        // if(base.State == MicrosceneNodeState.Finished)
-        //    return;
-        
-        for (int i = 0; i < SceneManager.sceneCount; i++)
-        {
-            // Condition will be true every frame where we have scene with 
-            // some name loaded
-            if(SceneManager.GetSceneAt(i).name == m_SceneName)
-            {
-                Complete(); // Set condition as satisfied for this frame
-                break;
-            }
-        }
-    }
-}
-
-// Example of a hybdrid node
-// Waiting may be treated as action but also you might want to have condition
-// E.g. "5 seconds pass or player entered trigger"
-// But as an action, you might want to chain it "start animation then wait 1 sec"
-// In graph view, hybrid node can be placed in any stack 
-// You can also change its type by using context menu
-[MicrosceneNodeType(MicrosceneNodeType.Hybrid)]
 [SerializeReferencePath(SRPathType.Abstract, "Wait")]
-public class WaitHybdridNode : MicrosceneNode, INameableNode // for INameableNode explanation see Dynamic Node Name
+class WaitNode : MicrosceneNode
 {
-    float timer;
-    [SerializeField, Min(0)] float m_WaitTime = 1f;
+    private double timeOverStamp;
+    [SerializeField, Min(0)] float m_Time;
+
+    // Called just before Update if node was updated for the first time 
     protected override void OnStart(in MicrosceneContext ctx)
     {
-        timer = 0;
+        if(m_Time == 0.0f)
+        {
+            // Completing from OnStart will prevent OnUpdate
+            Complete();
+            return;
+        }
+        
+        timeOverStamp = Time.timeAsDouble + m_Time;
     }
+
     protected override void OnUpdate(in MicrosceneContext ctx)
     {
-        timer += Time.deltaTime;
-        if (timer >= m_WaitTime)
+        // Use ctx.caller to debug with reference to Microscene component
+        UnityEngine.Debug.Log("Time left: "+(timeOverStamp - Time.timeAsDouble), ctx.caller);
+        
+        if(timeOverStamp >= Time.timeAsDouble)
             Complete();
     }
-    public string GetNiceNameString()
-    {
-        return m_WaitTime == 1f ? "Wait 1 second" : $"Wait {m_WaitTime} seconds";
-    }
+    
+    // NOTE: Throwing exception in OnStart on OnUpdate will lead to node being automatically completed
+    // if you're in editor or debug build
+    
+    // These are also available
+    public override void OnValidate() { }
+    public override void OnDrawSceneGizmo(bool selected, Microscene owner) { }
 }
+
 ```
 
+## Custom stack nodes
+You can define custom stack nodes in order to provide custom behaviour for node execution.
+```csharp
+using Microscenes;
+
+// Mark with this attribute in order to make type visible in node explorer
+// Also marks whether stack can handle each node leading to a different 
+[MicrosceneStackBehaviour(MicrosceneStackConnectionType.SingleOutput)]
+sealed class SequenceStack : MicrosceneStackBehaviour
+{
+    private int index;
+    // Is like "Start" for default nodes
+    public override void Reset(MicrosceneNode[] stack)
+    {
+        index = 0;
+    }
+    
+    // 'stack' contains children of this stack
+    // winnerIndex is important only for MultiOutput
+    public override bool Update(in MicrosceneContext ctx, MicrosceneNode[] stack, ref int winnerIndex)
+    {
+        stack[index].UpdateNode(ctx);
+        if(stack[index].State == MicrosceneNodeState.Finished)
+            ++index;
+        
+        return index >= stack.Length; // Return true when stack should stop execution
+    }
+}
+
+[MicrosceneStackBehaviour
+(MicrosceneStackConnectionType.MultipleOutput,
+ tooltip: "Will update each child node every frame and select output of a node that was completed first")]
+[SerializeReferencePath("Parallel\\First Stack")]
+sealed class ParallelFirstStack : MicrosceneStackBehaviour
+{
+    public override bool Update(in MicrosceneContext ctx, MicrosceneNode[] stack, ref int winnerIndex)
+    {
+        for (int i = 0; i < stack.Length; i++)
+        {
+            var node = stack[i];
+            node.UpdateNode(ctx);
+
+            if (node.State == MicrosceneNodeState.Finished)
+            {
+                // So, winnerIndex is index of a child node that 
+                // should be used to continue graph execution. It has to be in [0; stack.Length) range 
+                winnerIndex = i;
+                return true;
+            }
+        }
+        
+        return false;
+    }
+}
+
+```
 
 ## Type Icon
 `TypeIconAttribute` allows to add an icon to a node. You can initialize it using string 'filter', then the next set of rules is applied:
@@ -125,12 +166,12 @@ Initialization with Type works as follows:
 Just implement `INameableNode` interface. This will make graph view will set node name to whetever GetNiceNameString returns.
 Rich text is supported.
 ```csharp
-class NamedAction : MicroAction, INameableNode
+class NamedAction : MicrosceneNode, INameableNode
 {
     [SerializeField] string m_NodeName;
 
     // This name will be displayed in graph view
-    public string GetNiceNameString() => m_NodeName;
+    string INameableNode.GetNiceNameString() => m_NodeName;
 }
 ```
 
@@ -162,21 +203,21 @@ public class InteractableItem : MonoBehaviour, IMicrosceneContextProvider
 }
 
 [RequireContext(typeof(InteractionData))] // Node won't be available unless Microscene has component which provides such context
-public class InteractionDependentAction : MicroAction
+public class InteractionDependentAction : MicrosceneNode
 {
-    public override OnUpdateExecute(in MicrosceneContext ctx)
+    protected override void OnUpdate(in MicrosceneContext ctx)
     {
-        var interactionData = ctx.customData as InteractionData; // Given custom data
+        var interactionData = ctx.customData as InteractionData; // Get custom data
     }
 }
 ```
 
 ## Problems
-* The fact that graph is serialized in scene means we can not have actual tree because of serialization nesting limitations which adds a lot of unwanted complexity, especially for generating nodes back from serialized data. And frankly, runtime execution code looks messy as well
 * No Undo/Redo in graph view.
+* You can't really modify graph at runtime in a way that won't break it. I didn't have a need for it yet and I also don't know how would you implement such a thing
 * Connections to stack nodes without nodes inside are not restored when opening graph
 * Since intended for internal use, some editor code is really junky, sorry if you break your leg there :)
-* Appearently, graph view is going to get [deprecated](https://forum.unity.com/threads/graph-tool-foundation.1057667/page-2#post-8098055). Great =)
+* Apparently, graph view is going to get [deprecated](https://forum.unity.com/threads/graph-tool-foundation.1057667/page-2#post-8098055). Great =)
 * Search window in graph view is not very good and repeats some entries on search
-* No loops
+* No loops (Don't know if that's a problem actually)
 

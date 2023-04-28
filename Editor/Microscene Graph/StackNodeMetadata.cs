@@ -1,39 +1,35 @@
 ﻿using System;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace Microscenes.Editor
 {
     [Serializable]
     struct StackNodeMetadata
     {
-        public StackNodeMetadata(StackNode node)
+        public StackNodeMetadata(MicrosceneStackNode node) : this()
         {
-            if (node is ActionStackNode actionStack)
-                type = MicrosceneNodeType.Action;
-            else
-                type = MicrosceneNodeType.Precondition;
-
-            position = node.GetPosition().position;
+            position = node.NodePosition;
         }
+        
+        public int  nodeID;
+        public Rect position;
 
-        public StackNode Instantiate(GraphView view)
+        public void ApplyToNode(MicrosceneStackNode node)
         {
-            StackNode stackNode;
-            if(type == MicrosceneNodeType.Precondition)
+            EventCallback<GeometryChangedEvent> del = null;
+            
+            var position = this.position;
+            node.NodePosition = this.position;
+            
+            del = (GeometryChangedEvent evt) =>
             {
-                stackNode = new PreconditionStackNode(view);
-            }
-            else
-            {
-                stackNode = new ActionStackNode(view);
-            }
-
-            stackNode.SetGraphPosition(position);
-            return stackNode;
+                node.SetGraphPosition(position);
+                node.UnregisterCallback<GeometryChangedEvent>(del);
+            };
+            
+            node.RegisterCallback<GeometryChangedEvent>(del);
         }
-
-        public MicrosceneNodeType type;
-        public Vector2            position;
     }
 }

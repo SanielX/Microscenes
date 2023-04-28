@@ -2,18 +2,21 @@
 
 namespace Microscenes.Editor
 {
-    internal class EntryMicrosceneNode : GenericMicrosceneNodeView
+    internal class EntryMicrosceneNodeView : MicrosceneNodeView
     {
-        public EntryMicrosceneNode(GraphView view) : base(view)
+        public EntryMicrosceneNodeView(GraphView view, string ID) : base(view)
         {
             capabilities &= ~(Capabilities.Deletable | Capabilities.Stackable | Capabilities.Copiable);
             
-            base.title = "Entry";
+            base.title = ID;
+            this.ID = ID;
 
             var port = AutoPort.Create<Edge>(Orientation.Horizontal, UnityEditor.Experimental.GraphView.Direction.Output, Port.Capacity.Multi, typeof(Microscene), view, true);
             port.portColor = ColorUtils.FromHEX(0x26D9D9);
 
             outputContainer.Add(port);
         }
+        
+        public string ID;
     }
 }

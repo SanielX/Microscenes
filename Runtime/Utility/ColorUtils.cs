@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace Microscenes
 {
-    public static class ColorUtils
+    internal static class ColorUtils
     {
         /// <summary>
         /// Color format 0xRR_GG_BB

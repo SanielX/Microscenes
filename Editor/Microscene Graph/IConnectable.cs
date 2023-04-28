@@ -11,9 +11,10 @@ namespace Microscenes.Editor
         public Edge ConnectInputTo(Port p);
         public Edge ConnectOutputTo(Port p);
 
-        public Edge ConnectInputTo(IConnectable connectable);
         public Edge ConnectOutputTo(IConnectable connectable);
 
         public IEnumerable<Edge> OutputEdges();
+        
+        public IEnumerable<IConnectable> Children => new[] { this };
     }
 }

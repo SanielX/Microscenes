@@ -1,3 +1,4 @@
+using System;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.UIElements;
@@ -10,6 +11,9 @@ namespace Microscenes.Editor
     {
         IMGUIContainer      objField;
         MicrosceneGraphView graphView;
+        VisualElement       nodeInspector;
+        
+        TwoPaneSplitView windowSplitView;
 
         [SerializeField] bool locked;
         // Currently inspected microscene, serialized using instance ID so reference won't get lost
@@ -43,9 +47,43 @@ namespace Microscenes.Editor
         private void OnEnable()
         {
             EditorSceneManager.sceneSaving += OnSceneSaved;
-
+            
+            windowSplitView = new();
+            
+            rootVisualElement.styleSheets.Add(Resources.Load<StyleSheet>("MicrosceneGraphStyles"));
+            
+            nodeInspector = new() { name = "node-inspector" };
             graphView = new MicrosceneGraphView(this);
-            graphView.StretchToParentSize();
+            graphView.OnSelectedElement += (element) =>
+            {
+                if (element is MicrosceneNodeView view)
+                {
+                    while(nodeInspector.childCount > 0)
+                        nodeInspector.RemoveAt(0);
+
+                    IMGUIContainer imguiContainer = new IMGUIContainer(() =>
+                    {
+                        EditorGUILayout.LabelField($"Connected Stacks: {view.connectedPorts}");
+                        
+                        view.DoGUI(EditorGUIUtility.labelWidth);
+                    });
+                    imguiContainer.name = "inspector-imgui";
+                    imguiContainer.AddToClassList("imgui-container");
+                    imguiContainer.AddToClassList("microscene-node-imgui-container");
+                    nodeInspector.Add(imguiContainer);
+                }
+            };
+            // graphView.StretchToParentSize();
+            
+            windowSplitView.Add(graphView);
+            windowSplitView.Add(nodeInspector);
+            windowSplitView.fixedPaneIndex = 1;
+            windowSplitView.fixedPaneInitialDimension = 150; // EditorPrefs.GetFloat("MicrosceneView_Split_Size", 50);
+            windowSplitView.viewDataKey = "MicrosceneView_Split_Size";
+            windowSplitView.orientation = TwoPaneSplitViewOrientation.Horizontal;
+            
+            // windowSplitView.StretchToParentSize();
+            
             titleContent = new GUIContent("Microscene Graph Editor");
 
             var toolbar = new Toolbar();
@@ -87,8 +125,14 @@ namespace Microscenes.Editor
             objField = new IMGUIContainer(() =>
             {
                 EditorGUILayout.BeginHorizontal();
+                EditorGUI.BeginChangeCheck();
                 microscene = EditorGUILayout.ObjectField(microscene, typeof(Microscene), allowSceneObjects: true) as Microscene;
 
+                if (EditorGUI.EndChangeCheck())
+                {
+                    graphView.GenerateMicrosceneContent(microscene, microscene.value? new(microscene) : null);
+                }
+                
                 if(microscene.value)
                 {
                     EditorGUILayout.LabelField(microscene.value.gameObject.scene.name);
@@ -102,13 +146,18 @@ namespace Microscenes.Editor
             toolbar.Add(veLeft);
             toolbar.Add(veRight);
 
-            rootVisualElement.Add(graphView);
             rootVisualElement.Add(toolbar);
-
-            if (microscene.value)
-                graphView.GenerateMicrosceneContent(microscene, microscene.value ? new SerializedObject(microscene) : null);
+            rootVisualElement.Add(windowSplitView);
 
             EditorApplication.playModeStateChanged += RecreateOnExitPlaymode;
+        }
+
+        private void OnGUI()
+        {
+            if (!graphView.scene && (UnityEngine.Object)microscene != null)
+            {
+                graphView.GenerateMicrosceneContent(microscene, microscene.value ? new SerializedObject(microscene) : null);
+            }
         }
 
         // When exiting play mode graph can get out of sync, since play mode changes do not save, so we regenerate it

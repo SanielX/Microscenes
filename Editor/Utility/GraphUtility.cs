@@ -14,15 +14,25 @@ namespace Microscenes.Editor
         public void OnRemovedFromStack(StackNode node);
     }
 
+    public interface IRecieveStackCallbacks
+    {
+        public void OnAddedElements(IEnumerable<GraphElement> elements);
+        public void OnRemovedElements(IEnumerable<GraphElement> elements);
+    }
+
     static class GraphExtensions
     {
+        public static void SetGraphPosition(this GraphElement node, in Rect pos)
+        {
+            node.SetPosition(pos);
+        }
+
         public static void SetGraphPosition(this GraphElement node, in Vector2 pos)
         {
-            var rectPos = node.GetPosition();
-            rectPos.x = pos.x;
-            rectPos.y = pos.y;
-
-            node.SetPosition(rectPos);
+            var npos = node.GetPosition();
+            npos.position = pos;
+            
+            node.SetPosition(npos);
         }
     }
 
@@ -77,6 +87,9 @@ namespace Microscenes.Editor
 
             base.elementsInsertedToStackNode = (node, index, elements) =>
             {
+                if(node is IRecieveStackCallbacks calls)
+                    calls.OnAddedElements(elements);
+                
                 foreach (var element in elements)
                 {
                     if (element is IStackListener l)
@@ -86,6 +99,9 @@ namespace Microscenes.Editor
 
             base.elementsRemovedFromStackNode = (node, elements) =>
             {
+                if(node is IRecieveStackCallbacks calls)
+                    calls.OnRemovedElements(elements);
+                
                 foreach (var element in elements)
                 {
                     if (element is IStackListener l)

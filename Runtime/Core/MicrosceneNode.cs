@@ -1,21 +1,35 @@
 ﻿namespace Microscenes
 {
     [System.Serializable]
-    public class MicrosceneNode
+    public abstract class MicrosceneNode
     {
         public MicrosceneNodeState State { get; private set; }
 
         public void ResetState() => State = MicrosceneNodeState.None;
-
-        public void Update(in MicrosceneContext ctx)
+        
+        public void UpdateNode(in MicrosceneContext ctx)
         {
-            if(State != MicrosceneNodeState.Executing)
+#if UNITY_ASSERTIONS
+            try
             {
-                State = MicrosceneNodeState.Executing;
-                OnStart(ctx);
-            }
+#endif
+                if (State == MicrosceneNodeState.None) // Special first time execution case
+                {
+                    State = MicrosceneNodeState.Executing;
+                    OnStart(ctx);
+                    
+                    // We might have called Complete() in OnStart, which should omit calling Update
+                    if (State != MicrosceneNodeState.Finished)
+                        OnUpdate(ctx);
 
-            OnUpdate(ctx);
+                    return;
+                }
+
+                OnUpdate(ctx);
+
+#if UNITY_ASSERTIONS
+            } catch(System.Exception e) { Debug.LogException(e); Complete(); }
+#endif 
         }
 
         protected void Complete() => State = MicrosceneNodeState.Finished;

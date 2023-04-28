@@ -2,34 +2,40 @@
 using System.Collections.Generic;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 namespace Microscenes.Editor
 {
     [Serializable]
     struct MicrosceneNodeMetadata
     {
-        internal MicrosceneNodeMetadata(GenericMicrosceneNodeView node, int stackNode = -1)
+        internal MicrosceneNodeMetadata(MicrosceneNodeView node) : this()
         {
-            stackNodeIndex = stackNode;
-            position       = node.GetPosition().position;
-            expanded       = node.expanded;
+            position = node.NodePosition;
+            expanded = node.expanded;
         }
-
-        public void ApplyToNode(GenericMicrosceneNodeView node, List<StackNode> stackNodes)
+  
+        public void ApplyToNode(MicrosceneNodeView node)
         {
-            node.SetGraphPosition(position);
-            node.expanded = expanded;
-
-            if(stackNodeIndex >= 0 && stackNodeIndex < stackNodes.Count)
+            EventCallback<GeometryChangedEvent> del = null;
+            
+            node.NodePosition = this.position;
+            var position = this.position;
+            var expanded = this.expanded;
+            
+            del = (GeometryChangedEvent evt) =>
             {
-                stackNodes[stackNodeIndex].AddElement(node);
-                if (node is IStackListener listener)
-                    listener.OnAddedToStack(stackNodes[stackNodeIndex], 0);
-            }
+                node.SetGraphPosition(position);
+                node.expanded = expanded;
+                
+                node.UnregisterCallback<GeometryChangedEvent>(del);
+            };
+            
+            node.RegisterCallback<GeometryChangedEvent>(del);
         }
-
-        public int     stackNodeIndex;
-        public Vector2 position;
-        public bool    expanded;
+        
+        public int  nodeID;
+        public Rect position;
+        public bool expanded;
     }
 }
