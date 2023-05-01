@@ -25,7 +25,7 @@ namespace Microscenes
         public string Tooltip { get; }
     }
     
-    [System.Serializable, TypeIcon("Assets/Game Core/Level Design/Microscene System/microscenes/Editor/Icons/ActionStack.png")]
+    [System.Serializable, NodeIcon("Assets/Game Core/Level Design/Microscene System/microscenes/Editor/Icons/ActionStack.png")]
     public abstract class MicrosceneStackBehaviour
     {
         public abstract void Reset (MicrosceneNode[] stack);

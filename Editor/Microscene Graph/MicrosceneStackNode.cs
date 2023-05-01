@@ -33,7 +33,7 @@ namespace Microscenes.Editor
             this.view = view;
             
             string path;
-            var attr = stackBehaviour.GetType().GetCustomAttribute<SerializeReferencePathAttribute>();
+            var attr = stackBehaviour.GetType().GetCustomAttribute<NodePathAttribute>();
             if (attr is null)
             {
                 path = ObjectNames.NicifyVariableName(stackBehaviour.GetType().Name);

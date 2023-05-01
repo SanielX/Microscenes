@@ -1,9 +1,9 @@
 ﻿using UnityEngine;
 
-namespace Microscenes
+namespace Microscenes.Nodes
 {
-    [SerializeReferencePath(SRPathType.Abstract, "Wait")]
-    class WaitNode : MicrosceneNode
+    [NodePath(NodeFolder.Abstract + "Wait")]
+    public class WaitNode : MicrosceneNode
     {
         private double timeOverStamp;
         [SerializeField, Min(0)] float m_Time;

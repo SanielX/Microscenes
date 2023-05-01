@@ -1,4 +1,4 @@
-﻿namespace Microscenes
+﻿namespace Microscenes.Nodes
 {
     sealed class DefaultStackBehvaiour : MicrosceneStackBehaviour
     {

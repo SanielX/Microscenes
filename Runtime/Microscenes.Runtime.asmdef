@@ -1,9 +1,7 @@
 {
     "name": "Microscenes.Runtime",
     "rootNamespace": "",
-    "references": [
-        "CLRManager"
-    ],
+    "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

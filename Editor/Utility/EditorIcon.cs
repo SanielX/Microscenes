@@ -59,7 +59,10 @@ namespace Microscenes.Editor
             {
                 icon = EditorGUIUtility.IconContent(filter).image;
             }
-            finally { }
+            catch (Exception)
+            {
+                icon = null;
+            }
         }
 
         /// <summary>

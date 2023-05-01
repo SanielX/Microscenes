@@ -1,4 +1,4 @@
-﻿namespace Microscenes
+﻿namespace Microscenes.Nodes
 {
     [MicrosceneStackBehaviour(tooltip: "Selects child node at random")]
     sealed class RandomStack : MicrosceneStackBehaviour

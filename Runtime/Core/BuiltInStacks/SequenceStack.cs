@@ -1,4 +1,4 @@
-﻿namespace Microscenes
+﻿namespace Microscenes.Nodes
 {
     [MicrosceneStackBehaviour(MicrosceneStackConnectionType.SingleOutput)]
     sealed class SequenceStack : MicrosceneStackBehaviour

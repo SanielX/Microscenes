@@ -1,9 +1,11 @@
-﻿namespace Microscenes
+﻿using UnityEngine;
+
+namespace Microscenes.Utility
 {
     /// <summary>
     /// Helpers for implementing <see cref="INameableNode"/>
     /// </summary>
-    public static class NodeNamingUtility
+    public static class NodeNaming
     {
         private static readonly string[] vowels = new[]
         {
@@ -30,6 +32,34 @@
                 return text + "es";
             
             return text + "s";
+        }
+        
+        /// <summary>
+        /// Wraps text in rich text 'color' tag
+        /// </summary>
+        public static string Colored(string text, Color color)
+        {
+            return $"<color=#{ColorUtility.ToHtmlStringRGBA(color)}>{text}</color>";
+        }
+        
+        /// <inheritdoc cref="Colored(string,UnityEngine.Color)"/>
+        public static string Colored(string text, int hexColor)
+        {
+            return $"<color=#{hexColor:X}>{text}</color>";
+        }
+        
+        /// <summary>
+        /// Formats text using unity's formatter for variables, so it works only at edit time
+        /// </summary>
+        /// <remarks>Check UnityEditor.ObjectNames.NicifyVariableName for more info</remarks>
+        /// <returns> "_someName" => "Some Name" </returns>
+        public static string Nicify(string text)
+        {
+#if UNITY_EDITOR
+            return UnityEditor.ObjectNames.NicifyVariableName(text);
+#else
+            return text;
+#endif 
         }
     }
 }

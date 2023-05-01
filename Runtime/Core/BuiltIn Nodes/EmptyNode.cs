@@ -1,9 +1,8 @@
-﻿namespace Microscenes
+﻿namespace Microscenes.Nodes
 {
-    [SerializeReferencePath(SRPathType.Abstract, "Empty")]
     [System.Serializable]
-    [MicrosceneNode]
-    public class EmptyAction : MicrosceneNode
+    [MicrosceneNode, NodePath(NodeFolder.Abstract + "Empty")]
+    public class EmptyNode : MicrosceneNode
     {
         protected override void OnStart(in MicrosceneContext ctx)
         {

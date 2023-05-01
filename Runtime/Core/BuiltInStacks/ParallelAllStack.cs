@@ -1,6 +1,6 @@
-﻿namespace Microscenes
+﻿namespace Microscenes.Nodes
 {
-    [SerializeReferencePath("Parallel\\All Stack")]
+    [NodePath("Parallel\\All Stack")]
     [MicrosceneStackBehaviour(MicrosceneStackConnectionType.SingleOutput, 
         tooltip: "Will update each child node every frame and move when all of them are completed")]
     sealed class ParallelAllStack : MicrosceneStackBehaviour

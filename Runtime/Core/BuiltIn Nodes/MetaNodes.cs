@@ -1,11 +1,9 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
-namespace Microscenes
+namespace Microscenes.Nodes
 {
-    [MicrosceneNode, SerializeReferencePath(SRPathType.Abstract, "Start Microscene")]
-    class StartMicroscene : MicrosceneNode
+    [MicrosceneNode, NodePath(NodeFolder.Abstract + "Start Microscene")]
+    public class StartMicroscene : MicrosceneNode
     {
         [SerializeField] Microscene m_Microscene;
         [SerializeField] bool       m_Wait;
@@ -33,8 +31,8 @@ namespace Microscenes
         }
     }
 
-    [MicrosceneNode, SerializeReferencePath(SRPathType.Abstract, "Wait For Microscene")]
-    class WaitForMicroscene : MicrosceneNode
+    [MicrosceneNode, NodePath(NodeFolder.Abstract + "Wait For Microscene")]
+    public class WaitForMicroscene : MicrosceneNode
     {
         [SerializeField] Microscene m_Microscene;
 

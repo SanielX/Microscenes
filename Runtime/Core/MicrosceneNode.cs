@@ -28,7 +28,7 @@
                 OnUpdate(ctx);
 
 #if UNITY_ASSERTIONS
-            } catch(System.Exception e) { Debug.LogException(e); Complete(); }
+            } catch(System.Exception e) { UnityEngine.Debug.LogException(e); Complete(); }
 #endif 
         }
 

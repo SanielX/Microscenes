@@ -50,7 +50,7 @@ namespace Microscenes.Editor
             this.wrapper.binding = binding;
             wrapperSerialized = new SerializedObject(wrapper);
 
-            SetIcon(binding.GetType());
+            IconsProvider.Instance.GetIconAsync(binding.GetType(), (tex) => icon = tex);
             title = NameForNode(binding.GetType());
             
             MicrosceneNodeAttribute nodeAttribute = binding.GetType().GetCustomAttribute<MicrosceneNodeAttribute>();
@@ -142,7 +142,6 @@ namespace Microscenes.Editor
 
         public void SetIcon(Type t)
         {
-            icon = MicrosceneGraphView.GetIconForType(t);
         }
         
         public void DoGUI(float guiLabelWidth)

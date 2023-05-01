@@ -1,7 +1,7 @@
-﻿namespace Microscenes
+﻿namespace Microscenes.Nodes
 {
     [MicrosceneStackBehaviour(tooltip: "Will update each child node every frame and select output of a node that was completed first")]
-    [SerializeReferencePath("Parallel\\First Stack")]
+    [NodePath("Parallel\\First Stack")]
     sealed class ParallelFirstStack : MicrosceneStackBehaviour
     {
         public override void Reset(MicrosceneNode[] stack)

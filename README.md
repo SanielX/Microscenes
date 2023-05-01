@@ -9,7 +9,7 @@ this one is actually pretty programmer oriented and will require you to write cu
 
 Minimum supported unity version: 2021.3
 
-**Icons shown in examples are not available in this package. You can find example nodes in `Runtime/Example Nodes` directory.
+**Icons shown in examples are not available in this package. You can find example nodes in `Runtime/Core/BuiltIn *` directories.
 The API will change in the future, no backwards compatability is guaranteed.**
 
 ![](Git~/Example.png)
@@ -40,20 +40,22 @@ You node will be available in Create Node dropdown automatically.
 
 using Microscenes;
 
-[System.Serializable]                                  // Required by unity
-[MicrosceneNode("Useful tooltip")]                     // Mark node to make it visible in graph window
-[SerializeReferencePath(SRPathType.Abstract, "Empty")] // Enum is a shortcut to make folders, you can skip
-                                                       // this attribute if you don't want custom path in node explorer
+[System.Serializable]                     // Required by unity, 
+                                          // but not really since unity inherits Serializable 
+                                          // (even though attribute says its not inherited)
+[MicrosceneNode("Useful tooltip")]        // Mark node to make it visible in graph window
+[NodePath(NodeFolder.Abstract + "Empty")] // Enum is a shortcut to make folders, you can skip
+                                          // this attribute if you don't want custom path in node explorer
 public class EmptyAction : MicrosceneNode
 {
     protected override void OnStart(in MicrosceneContext ctx)
     {
-        Complete();
+        Complete();  // Immediately finish execution of a node
     }
 }
 
 // Example of checking condition every frame
-[SerializeReferencePath(SRPathType.Abstract, "Wait")]
+[NodePath(NodeFolder.Abstract + "Wait")]
 class WaitNode : MicrosceneNode
 {
     private double timeOverStamp;
@@ -97,7 +99,7 @@ You can define custom stack nodes in order to provide custom behaviour for node 
 using Microscenes;
 
 // Mark with this attribute in order to make type visible in node explorer
-// Also marks whether stack can handle each node leading to a different 
+// Also marks whether stack can handle each node leading to a different path
 [MicrosceneStackBehaviour(MicrosceneStackConnectionType.SingleOutput)]
 sealed class SequenceStack : MicrosceneStackBehaviour
 {
@@ -123,7 +125,7 @@ sealed class SequenceStack : MicrosceneStackBehaviour
 [MicrosceneStackBehaviour
 (MicrosceneStackConnectionType.MultipleOutput,
  tooltip: "Will update each child node every frame and select output of a node that was completed first")]
-[SerializeReferencePath("Parallel\\First Stack")]
+[NodePath("Parallel\\First Stack")] // Node path also works with stacks, NodeIcon does not
 sealed class ParallelFirstStack : MicrosceneStackBehaviour
 {
     public override bool Update(in MicrosceneContext ctx, MicrosceneNode[] stack, ref int winnerIndex)
@@ -148,13 +150,13 @@ sealed class ParallelFirstStack : MicrosceneStackBehaviour
 
 ```
 
-## Type Icon
-`TypeIconAttribute` allows to add an icon to a node. You can initialize it using string 'filter', then the next set of rules is applied:
+## NodeIconAttribute
+`NodeIconAttribute` allows to add an icon to a node. You can initialize it using string 'filter', then the next set of rules is applied:
 * If filter starts with "Assets/" or "Packages/", then icon is loaded using absolute path using  [AssetDatabase.LoadAssetAtPath\<Texture>](https://docs.unity3d.com/ScriptReference/AssetDatabase.LoadAssetAtPath.html).
 * If filter starts with "Resources/" then rest of the path is used for [Resources.Load(string)](https://docs.unity3d.com/ScriptReference/Resources.Load.html) call.</br>
 * If filter starts with t: and contains '.' symbol, icon is retrieved from type with the same name (Must match whole name including namespace)</br>
 * If filter starts with t: and <b>does not</b> contain '.', then search through types is used but only for Type.Name, first match is used to retrieve the icon. </br>
-* If type is found, then rules are the same as for intiialization with `System.Type`
+* If type is found, then rules are the same as for initialization with `System.Type`
 * If none of these criteria are met, icon is loaded using [EditorGUIUtility.IconContent(string)](https://docs.unity3d.com/ScriptReference/EditorGUIUtility.IconContent.html)
 
 Initialization with Type works as follows:
@@ -174,6 +176,8 @@ class NamedAction : MicrosceneNode, INameableNode
     string INameableNode.GetNiceNameString() => m_NodeName;
 }
 ```
+
+Check out Microscenes.Utility.NodeNaming class for helper methods to implement this interface, such as text coloring.
 
 ## Context System
 So one other thing I noticed is that microscenes can be nicely used for interactions with objects, but in this case some nodes would need additional data such as lookDirection and so on. Therefore I made context system. Basically, any node can define `RequireContext` attribute, which will make it to not be available until context request is satisfied.
@@ -217,7 +221,7 @@ public class InteractionDependentAction : MicrosceneNode
 * You can't really modify graph at runtime in a way that won't break it. I didn't have a need for it yet and I also don't know how would you implement such a thing
 * Connections to stack nodes without nodes inside are not restored when opening graph
 * Since intended for internal use, some editor code is really junky, sorry if you break your leg there :)
-* Apparently, graph view is going to get [deprecated](https://forum.unity.com/threads/graph-tool-foundation.1057667/page-2#post-8098055). Great =)
+* Apparently, graph view is going to get [deprecated](https://forum.unity.com/threads/graph-tool-foundation.1057667/page-2#post-8098055). Great :')
 * Search window in graph view is not very good and repeats some entries on search
 * No loops (Don't know if that's a problem actually)
 

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using Microscenes.Nodes;
 using UnityEditor;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
@@ -32,12 +33,6 @@ namespace Microscenes.Editor
 
                 return change;
             };
-        }
-
-        public override void AddToSelection(ISelectable selectable)
-        {
-            base.AddToSelection(selectable);
-            ;
         }
 
         public override EventPropagation DeleteSelection()
@@ -164,7 +159,7 @@ namespace Microscenes.Editor
                     continue;
 
                 string path;
-                var attr = type.GetCustomAttribute<SerializeReferencePathAttribute>();
+                var attr = type.GetCustomAttribute<NodePathAttribute>();
                 if (attr is null)
                 {
                     path = ObjectNames.NicifyVariableName(type.Name);
@@ -172,7 +167,7 @@ namespace Microscenes.Editor
                 else
                     path = attr.Path;
 
-                builder.AddEntry(prefix + path, userData: type, icon: GetIconForType(type));
+                builder.AddEntry(prefix + path, userData: type, icon: IconsProvider.Instance.GetIconForType(type));
             }
         }
 
@@ -200,7 +195,7 @@ namespace Microscenes.Editor
                     continue;
 
                 string path;
-                var attr = type.GetCustomAttribute<SerializeReferencePathAttribute>();
+                var attr = type.GetCustomAttribute<NodePathAttribute>();
                 if (attr is null)
                 {
                     path = ObjectNames.NicifyVariableName(type.Name);
@@ -208,24 +203,8 @@ namespace Microscenes.Editor
                 else
                     path = attr.Path;
 
-                builder.AddEntry(prefix + path, userData: type, icon: GetIconForType(type));
+                builder.AddEntry(prefix + path, userData: type, icon: IconsProvider.Instance.GetIconForType(type));
             }
-        }
-
-        public static Texture GetIconForType(Type t)
-        {
-            var typeIcon = t.GetCustomAttribute<TypeIconAttribute>(inherit: true);
-            if (typeIcon is not null)
-            {
-                if (typeIcon.Type is null)
-                {
-                    return new EditorIcon(typeIcon.Name);
-                }
-                
-                return new EditorIcon(typeIcon.Type);
-            }
-            
-            return null;
         }
  
         // TODO: Make serialization & deserialization less of a mess
