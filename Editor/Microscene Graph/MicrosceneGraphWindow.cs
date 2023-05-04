@@ -50,7 +50,7 @@ namespace Microscenes.Editor
             
             windowSplitView = new();
             
-            rootVisualElement.styleSheets.Add(Resources.Load<StyleSheet>("MicrosceneGraphStyles"));
+            rootVisualElement.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(MicrosceneGraphViewResources.STYLE_PATH));// Resources.Load<StyleSheet>("MicrosceneGraphStyles"));
             
             nodeInspector = new() { name = "node-inspector" };
             graphView = new MicrosceneGraphView(this);

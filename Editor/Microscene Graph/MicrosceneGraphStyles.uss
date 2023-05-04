@@ -1,4 +1,28 @@
+#node-imgui
+{
+    flex-grow: 1;
+}
 
+.microscene-title-container
+{
+    flex-grow: 1;
+}
+.microscene-title-container > *
+{
+    flex-grow: 1;
+}
+
+.microscene-title-container > * > #title-label
+{
+    max-width: 175;
+    flex-grow: 1;
+    text-overflow: ellipsis;
+}
+
+.microscene-node-imgui-container
+{
+    flex-grow: 1;
+}
 
 #input > .unity-label 
 {
