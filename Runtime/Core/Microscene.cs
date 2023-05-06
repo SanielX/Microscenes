@@ -10,7 +10,9 @@ namespace Microscenes
     {
         None,
         Executing,
-        Finished
+        Finished,
+        
+        Crashed,
     }
 
     [System.Serializable]
@@ -28,7 +30,7 @@ namespace Microscenes
             connectionsArray = con
         };
     }
-    
+     
     // Microscene node can either be one or a stack of multiple nodes
     // Which are connected with each other
     [System.Serializable]
@@ -44,8 +46,8 @@ namespace Microscenes
         // At least 1 node, can be multiple, in graph represented as stack node
         // Stack node define an AND statement inside a graph
         // To complete, all nodes inside a stack need to finish their execution
-        [SerializeReference] public MicrosceneNode[]                 nodeStack    = Array.Empty<MicrosceneNode>();
-        [SerializeField]     public MicrosceneNodeEntryConnections[] connections  = Array.Empty<MicrosceneNodeEntryConnections>();
+        [SerializeField] public MicrosceneNode[]                 nodeStack    = Array.Empty<MicrosceneNode>();
+        [SerializeField] public MicrosceneNodeEntryConnections[] connections  = Array.Empty<MicrosceneNodeEntryConnections>();
     }
 
     public enum MicrosceneGraphState
@@ -63,7 +65,7 @@ namespace Microscenes
         List<MicrosceneNodeEntry> executingStacks     = new(16);
         List<MicrosceneNodeEntry> executingQuitStacks = new(16);
         object customContextData;
-
+ 
         /// <summary>
         /// Should be used if you want to serialize microscene state
         /// </summary>
@@ -73,20 +75,50 @@ namespace Microscenes
             set => m_Skip = value;
         }
 
+        internal enum NodeReportResult
+        {
+            None,
+            Updating,
+            Succeded,
+            Crashed,
+        }
+
         //https://docs.unity3d.com/2021.3/Documentation/Manual/script-Serialization.html
         // States you can have these but actually it only works on top-most fields like this one.
         // If any of inner fields of struct/class are marked as editor only then it breaks
 #if UNITY_EDITOR
+
+        internal struct NodeReport
+        {
+            public NodeReportResult result;
+            public Exception        exception;
+        }
+        
+        internal Dictionary<MicrosceneNode, NodeReport> _nodeReports = new(); 
+        
         // Gonna leave graph version in case serialization changes much (shouldn't happen tho?)
         [SerializeField] int    m_SerializedVersion;
         [SerializeField] string m_Notes;
         
-        [SerializeField]     internal string m_MetadataJson;              // This contains data about node positions, sticky notes, etc
+        [SerializeField] internal string m_MetadataJson;              // This contains data about node positions, sticky notes, etc
         [SerializeReference] internal MicrosceneNodeEntry[] m_AllEntries = Array.Empty<MicrosceneNodeEntry>(); // This is needed to load graph back properly
                                                                           // since root only contains connections to nodes it needs
                                                                           // therefore if we restore graph just by looking at nodes root is connected to,
                                                                           // we'll loose any information about unconnected nodes
-#endif 
+#endif
+        
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        internal void Report(in MicrosceneContext context, NodeReportResult report, Exception exception = null)
+        {
+#if UNITY_EDITOR
+            _nodeReports[context.CurrentNode] = new()
+            {
+                result        = report, 
+                exception     = exception,
+            };
+#endif
+        }
+
         [Tooltip("When microscene starts it immediately moves to Finishing state")]
         [SerializeField]     internal bool   m_Skip;
         [SerializeReference] internal MicrosceneNodeEntry m_Root;
@@ -125,6 +157,7 @@ namespace Microscenes
         public void StartExecutingMicroscene(object customData)
         {
 #if UNITY_ASSERTIONS
+            _nodeReports.Clear();
             if (customData != null && context is null)
                 Debug.LogWarning("Microscene has no context but is invoked with non null custom data", this);
 #endif
@@ -143,7 +176,8 @@ namespace Microscenes
 #endif
             {
                 graphState = MicrosceneGraphState.Executing;
-                AdvanceGraphExecution(m_Root, 0, executingStacks);
+                MicrosceneStackContext ctx = new(this, customContextData);
+                AdvanceGraphExecution(m_Root, 0, executingStacks, ref ctx);
             }
 
             customContextData = customData;
@@ -152,12 +186,11 @@ namespace Microscenes
 
         void LateUpdate()
         {
-            var ctx = new MicrosceneContext(caller: this, customData: customContextData);
-            ExecuteEntriesList(executingStacks, ctx);
+            ExecuteEntriesList(executingStacks);
 
             if (graphState == MicrosceneGraphState.Finishing)
             {
-                ExecuteEntriesList(executingQuitStacks, ctx);
+                ExecuteEntriesList(executingQuitStacks);
 
                 if (executingQuitStacks.Count == 0)
                 {
@@ -171,51 +204,62 @@ namespace Microscenes
             }
         }
 
-        private void ExecuteEntriesList(List<MicrosceneNodeEntry> entriesList, in MicrosceneContext ctx)
+        private void ExecuteEntriesList(List<MicrosceneNodeEntry> entriesList)
         {
+            MicrosceneStackContext stackContext = new(this, customContextData);
+            
             for (int j = 0; j < entriesList.Count; j++)
             {
                 int winnerConnection = 0;
-                var stack = entriesList[j];
-
-                Assert.IsNotNull(stack.stackBehaviour, "Stack behvaiour must not be null, graph was not properly serialized!");
+                var nodeEntry = entriesList[j];           // Stack of nodes
+                stackContext.childrenNodes = nodeEntry.nodeStack; // Pase it into context
+                
                 bool finished = true;
 
 #if UNITY_ASSERTIONS
-                if (stack.nodeStack.Length == 0)
+                Assert.IsNotNull(nodeEntry.stackBehaviour, "Stack behvaiour must not be null, graph was not properly serialized!");
+                
+                if (nodeEntry.nodeStack.Length == 0)
                 {
                     Debug.LogError($"One of the stacks inside microscene has 0 children but is used in graph, " +
                                    $"this should be fixed, '{name}' scene:'{gameObject.scene.name}'", this);
-                }
-                else
-#endif
-                {
-#if UNITY_ASSERTIONS
-                    try
-                    {
-#endif
-                        finished = stack.stackBehaviour.Update(ctx, stack.nodeStack, ref winnerConnection);
-#if UNITY_ASSERTIONS
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.LogException(e, this);
-                    }
                     
-                    if(winnerConnection < 0 || winnerConnection >= stack.connections.Length)
-                        throw new System.IndexOutOfRangeException($"winnerConnection was set to invalid value of '{winnerConnection}'");
-#endif 
+                    
+                    entriesList.RemoveAt(j--);
+                    AdvanceGraphExecution(nodeEntry, winnerConnection, entriesList, ref stackContext);
+                    continue;
                 }
+                
+                try
+                {
+#endif
+                    // Actually important stuff
+                    var result = nodeEntry.stackBehaviour.Update(ref stackContext);
+                    winnerConnection = result.winnerIndex;
+                    finished         = result.finished;
+                    
+#if UNITY_ASSERTIONS
+                }
+                catch (Exception e)
+                {
+                    Debug.LogException(e, this);
+                }
+                    
+                if(winnerConnection < 0 || winnerConnection >= nodeEntry.connections.Length)
+                    throw new System.IndexOutOfRangeException($"winnerConnection was set to invalid value of '{winnerConnection}'");
+#endif 
+                
 
                 if (finished)
                 {
                     entriesList.RemoveAt(j--);
-                    AdvanceGraphExecution(stack, winnerConnection, entriesList);
+                    AdvanceGraphExecution(nodeEntry, winnerConnection, entriesList, ref stackContext);
                 }
             }
         }
 
-        private void AdvanceGraphExecution(MicrosceneNodeEntry stack, int winnerConnection, List<MicrosceneNodeEntry> entries)
+        private void AdvanceGraphExecution(MicrosceneNodeEntry stack, int winnerConnection, 
+                                           List<MicrosceneNodeEntry> targetExecutionList, ref MicrosceneStackContext context)
         {
             if(stack.connections.Length == 0)
                 return;
@@ -239,26 +283,29 @@ namespace Microscenes
                     {
                         connection.nodeStack[k].ResetState();
                     }
-
-                    connection.stackBehaviour.Reset(connection.nodeStack);
-                    entries.Add(connection);
+                    
+                    context.childrenNodes = connection.nodeStack;
+                    connection.stackBehaviour.Start(ref context);
+                    targetExecutionList.Add(connection);
                 }
             }
         }
 
         internal void Finish()
         {
-            if (graphState < MicrosceneGraphState.Finishing)
+            if (graphState >= MicrosceneGraphState.Finishing) // Finished || Finishing
+                return;
+            
+            MicrosceneStackContext ctx = new(this, customContextData);
+                
+            if (m_QuitRoot is not null && m_QuitRoot.connections.Length > 0)
             {
-                if (m_QuitRoot is not null && m_QuitRoot.connections.Length > 0)
-                {
-                    graphState = MicrosceneGraphState.Finishing;
-                    AdvanceGraphExecution(m_QuitRoot, 0, executingQuitStacks);
-                }
-                else
-                {
-                    graphState = MicrosceneGraphState.Finished;
-                }
+                graphState = MicrosceneGraphState.Finishing;
+                AdvanceGraphExecution(m_QuitRoot, 0, executingQuitStacks, ref ctx);
+            }
+            else
+            {
+                graphState = MicrosceneGraphState.Finished;
             }
         }
         
@@ -270,17 +317,6 @@ namespace Microscenes
             
             if (!UnityEditor.EditorApplication.isPlaying && context != null)
                 enabled = false;
-
-            if (m_AllEntries is null)
-                return;
-
-            foreach (var entry in m_AllEntries)
-            {
-                foreach (var node in entry.nodeStack)
-                {
-                    node?.OnValidate();
-                }
-            }
         }
 
         private void OnDrawGizmos()

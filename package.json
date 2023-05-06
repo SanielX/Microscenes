@@ -1,6 +1,6 @@
 {
     "name": "com.alexk.microscenes",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "displayName": "Microscenes",
     "description": "Graph tool for fast level design",
     "unity": "2021.3",

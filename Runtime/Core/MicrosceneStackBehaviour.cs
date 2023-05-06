@@ -2,33 +2,29 @@
 
 namespace Microscenes
 {
-    public enum MicrosceneStackConnectionType
-    {
-        SingleOutput,
-        MultipleOutput,
-    }
-    
-    /// <summary>
-    /// Use this attribute to make your class browsable from graph view
-    /// </summary>
-    public class MicrosceneStackBehaviourAttribute : Attribute
-    {
-        public MicrosceneStackBehaviourAttribute(
-            MicrosceneStackConnectionType type = MicrosceneStackConnectionType.MultipleOutput,
-            string tooltip = null)
-        {
-            Type    = type;
-            Tooltip = tooltip;
-        }
-        
-        public MicrosceneStackConnectionType Type { get; }
-        public string Tooltip { get; }
-    }
-    
-    [System.Serializable, NodeIcon("Assets/Game Core/Level Design/Microscene System/microscenes/Editor/Icons/ActionStack.png")]
+    [Serializable]
     public abstract class MicrosceneStackBehaviour
     {
-        public abstract void Reset (MicrosceneNode[] stack);
-        public abstract bool Update(in MicrosceneContext ctx, MicrosceneNode[] stack, ref int winnerIndex);
+        /// <summary>
+        /// Called when graph execution gets to this stack. Not that Start may be called multiple times if Microscene is activated multiple times
+        /// </summary>
+        public virtual void Start(ref MicrosceneStackContext ctx) { }
+        
+        /// <summary>
+        /// Called every frame stack is updated
+        /// </summary>
+        /// <remarks>See <see cref="FinishIf"/>, <see cref="Finish"/>, <see cref="Continue"/> and <see cref="FinishAndSelect"/> methods</remarks>
+        public abstract MicrosceneStackResult Update(ref MicrosceneStackContext ctx);
+
+        protected MicrosceneStackResult FinishAndSelect(int index)
+        {
+            return new MicrosceneStackResult(true, index);
+        }
+        
+        protected MicrosceneStackResult Finish()                 => new(true, 0);
+        protected MicrosceneStackResult FinishIf(bool condition) => new(condition, 0);
+        protected MicrosceneStackResult FinishIfAndSelect(bool condition, int index) => new(condition, index);
+        
+        protected MicrosceneStackResult Continue() => default;
     }
 }

@@ -4,13 +4,17 @@ namespace Microscenes
 {
     public ref struct MicrosceneContext
     {
-        public MicrosceneContext(Component caller, object customData)
+        public Component caller      { get; internal set; }
+        public object    customData  { get; internal set; }
+        
+#if UNITY_ASSERTIONS
+        internal MicrosceneNode CurrentNode      { get; set; }
+#else
+        internal MicrosceneNode CurrentNode
         {
-            this.caller = caller;
-            this.customData = customData;
+            get => null;
+            set { }
         }
-
-        public Component caller;
-        public object customData;
+#endif 
     }
 }

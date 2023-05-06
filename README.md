@@ -1,4 +1,6 @@
 # Microscenes
+![](Git~/demo0.gif)
+
 Microscenes is a highly experimental visual scripting solution I developed to design small gameplay sections.
 Its main idea is to provide UX with minimum need for technical knowledge & fast iteration, without having to constantly update node database like Bolt forces you to.
 All graphs are stored in scene, not as scriptable objects so nodes can contain references to scene objects without any limitations. Though if you
@@ -12,6 +14,16 @@ Minimum supported unity version: 2021.3
 **Icons shown in examples are not available in this package. You can find example nodes in `Runtime/Core/BuiltIn *` directories.
 The API will change in the future, no backwards compatability is guaranteed.**
 
+## Installing
+- Go to package manager. 
+- Click Add Package button (Plus icon), select "Add package from Git URL..."
+- Paste this: `https://github.com/SanielX/Microscenes.git`
+- Click Add
+
+Note that you need Git installed on your computer for this to work, you can grab it [here](https://git-scm.com/downloads)
+
+## Rules
+
 ![](Git~/Example.png)
 
 Microscene system is designed for linear games that have pretty defined order of events, though I don't see much of a problem in using them elsewhere.
@@ -23,14 +35,26 @@ The idea behind this system is very simple can is described in following picture
 Basically, you should make nodes that are suitable for your game and are abstract enough that you can describe what they do
 in one actual sentence like "Wait until player is in trigger".
 
+## Cool things
+* Graphs are serialized as part of the scene, so there's no limitation on referencing scene objects
+* But if you want to save graph as an asset you can use [Presets](https://docs.unity3d.com/Manual/Presets.html) or Prefabs to do so
+* Each node is a scriptable object so you can use CustomEditors like you would with any other unity object for free
+* Undo/Redo in graph view
+* See what nodes are being executed at runtime
+* If any node throws, you can see last exception in node inspector when selecting it
+* You can "Skip" graph execution which will lead to "Exit" root immediately. 
+This allows to test levels and skip towards the thing you need to happen
+
 ## Creating graph
 Just add Microscene component to any GameObject and open graph using corresponding button. You can also open editor window from `Window/Microscene Graph Editor` menu. This window will automatically find Microscene component in your selection and regenerate graph. You can lock the window if you don't want selection change to change graph.
 Graph is saved along with the scene, when you change target object or when closing window.
 
 ![](Git~/EditorWindow.png)
 
-Graph is then executed as soon as component is enabled in `LateUpdate()`.
+Graph is then executed as soon as component is enabled. It uses `LateUpdate()` to update.
 
+Note that since graph is serialized in a component itself, you can't modify it when the game is running.
+You also must save scene before any changes made to graph structure are applied to the component.
 
 ## Creating nodes
 To add node all you have to do is inherit your class from MicroAction or MicroPrecondition. Since every node is just a class serialized using `[SerializeReference]`, you don't need to create separate file for each one.
@@ -40,13 +64,14 @@ You node will be available in Create Node dropdown automatically.
 
 using Microscenes;
 
-[System.Serializable]                     // Required by unity, 
-                                          // but not really since unity inherits Serializable 
-                                          // (even though attribute says its not inherited)
+// ... EmptyAction.cs ... MicrosceneNode is a scriptable object so you have to keep 1 class per file
+// for it to work
 [MicrosceneNode("Useful tooltip")]        // Mark node to make it visible in graph window
 [NodePath(NodeFolder.Abstract + "Empty")] // Enum is a shortcut to make folders, you can skip
                                           // this attribute if you don't want custom path in node explorer
-public class EmptyAction : MicrosceneNode
+// Note that if you class name ends with Node, Action, Precondition or Stack then
+// these words will be removed in graph view
+public class EmptyNode : MicrosceneNode
 {
     protected override void OnStart(in MicrosceneContext ctx)
     {
@@ -83,11 +108,11 @@ class WaitNode : MicrosceneNode
             Complete();
     }
     
-    // NOTE: Throwing exception in OnStart on OnUpdate will lead to node being automatically completed
-    // if you're in editor or debug build
+    // NOTE: Throwing exception in OnStart on OnUpdate will lead to node state set to Crashed
+    // This node will never finish its execution. This only happens if UNITY_ASSERTIONS is true
+    // In release builds whole microscene will get aborted, so be sure to handle your errors properly
     
-    // These are also available
-    public override void OnValidate() { }
+    // Also available
     public override void OnDrawSceneGizmo(bool selected, Microscene owner) { }
 }
 
@@ -104,47 +129,50 @@ using Microscenes;
 sealed class SequenceStack : MicrosceneStackBehaviour
 {
     private int index;
-    // Is like "Start" for default nodes
-    public override void Reset(MicrosceneNode[] stack)
+    
+    // Note that Start may be called multiple times if microscene was activated multiple times
+    public override void Start(ref MicrosceneStackContext ctx)
     {
         index = 0;
     }
-    
-    // 'stack' contains children of this stack
-    // winnerIndex is important only for MultiOutput
-    public override bool Update(in MicrosceneContext ctx, MicrosceneNode[] stack, ref int winnerIndex)
+
+    public override MicrosceneStackResult Update(ref MicrosceneStackContext ctx)
     {
-        stack[index].UpdateNode(ctx);
-        if(stack[index].State == MicrosceneNodeState.Finished)
+        var nodeState = ctx.UpdateNode(index); // index must be in [0; ctx.StackLength) range
+                                               // This is basically children nodes of a stack
+        if(nodeState == MicrosceneNodeState.Finished) // Updating node returns its state after update
             ++index;
         
-        return index >= stack.Length; // Return true when stack should stop execution
+        // There are a bunch of methods to return result
+        // Continue() - to continue execution of a stack, 
+        // Finish()   - to finish execution of a stack and select output at index 0, 
+        // FinishIf(condition) - to finish execution if condition is true, 
+        // FinishAndSelect(int nodeIndex) - finish and select output at index nodeIndex
+        // FinishIfAndSelect(bool condition, int nodeIndex) - combination of the above
+        return FinishIf(index >= ctx.StackLength);
     }
 }
 
-[MicrosceneStackBehaviour
-(MicrosceneStackConnectionType.MultipleOutput,
- tooltip: "Will update each child node every frame and select output of a node that was completed first")]
-[NodePath("Parallel\\First Stack")] // Node path also works with stacks, NodeIcon does not
+[MicrosceneStackBehaviour(MicrosceneStackConnectionType.MultipleOutput, 
+    tooltip: "Will update each child node every frame and select output "+
+             "of a node that was completed first")]
+[NodePath("Parallel\\First Stack")]
 sealed class ParallelFirstStack : MicrosceneStackBehaviour
 {
-    public override bool Update(in MicrosceneContext ctx, MicrosceneNode[] stack, ref int winnerIndex)
+    public override MicrosceneStackResult Update(ref MicrosceneStackContext ctx)
     {
-        for (int i = 0; i < stack.Length; i++)
+        // Going through all children until one of them finishes
+        for (int i = 0; i < ctx.StackLength; i++)
         {
-            var node = stack[i];
-            node.UpdateNode(ctx);
+            var nodeState = ctx.UpdateNode(i);
 
-            if (node.State == MicrosceneNodeState.Finished)
+            if (nodeState == MicrosceneNodeState.Finished)
             {
-                // So, winnerIndex is index of a child node that 
-                // should be used to continue graph execution. It has to be in [0; stack.Length) range 
-                winnerIndex = i;
-                return true;
+                return FinishAndSelect(i);
             }
         }
         
-        return false;
+        return Continue();
     }
 }
 
@@ -217,9 +245,8 @@ public class InteractionDependentAction : MicrosceneNode
 ```
 
 ## Problems
-* No Undo/Redo in graph view.
+* Can't copy paste nodes
 * You can't really modify graph at runtime in a way that won't break it. I didn't have a need for it yet and I also don't know how would you implement such a thing
-* Connections to stack nodes without nodes inside are not restored when opening graph
 * Since intended for internal use, some editor code is really junky, sorry if you break your leg there :)
 * Apparently, graph view is going to get [deprecated](https://forum.unity.com/threads/graph-tool-foundation.1057667/page-2#post-8098055). Great :')
 * Search window in graph view is not very good and repeats some entries on search

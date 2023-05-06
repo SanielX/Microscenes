@@ -7,7 +7,7 @@ using UnityEngine.UIElements;
 
 namespace Microscenes.Editor
 {
-    public class MicrosceneGraphWindow : EditorWindow
+    public class MicrosceneGraphWindow : EditorWindow, IHasCustomMenu
     {
         IMGUIContainer      objField;
         MicrosceneGraphView graphView;
@@ -18,6 +18,23 @@ namespace Microscenes.Editor
         [SerializeField] bool locked;
         // Currently inspected microscene, serialized using instance ID so reference won't get lost
         [SerializeField] InstanceIDReference<Microscene> microscene;
+
+        private static GUIStyle lockButtonStyle;
+        void ShowButton(Rect rect)
+        {
+            if (lockButtonStyle == null) {
+                lockButtonStyle = "IN LockButton";
+            }
+            
+            bool newLocked = GUI.Toggle(rect, this.locked, GUIContent.none, lockButtonStyle);
+            if(newLocked != locked)
+                FlipLocked();
+        }
+        
+        public void AddItemsToMenu(GenericMenu menu)
+        {
+            menu.AddItem(new GUIContent("Locked"), locked, FlipLocked);
+        }
 
         [MenuItem("Window/Microscene Graph Editor")]
         public static void Open()
@@ -43,14 +60,16 @@ namespace Microscenes.Editor
                 }
             }   
         }
-
+        
+        private static GUIStyle wrappedLabel;
+        private Vector2 nodeInspectorScroll;
         private void OnEnable()
         {
             EditorSceneManager.sceneSaving += OnSceneSaved;
             
             windowSplitView = new();
             
-            rootVisualElement.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(MicrosceneGraphViewResources.STYLE_PATH));// Resources.Load<StyleSheet>("MicrosceneGraphStyles"));
+            rootVisualElement.styleSheets.Add(MicrosceneGraphViewResources.LoadStyles());// Resources.Load<StyleSheet>("MicrosceneGraphStyles"));
             
             nodeInspector = new() { name = "node-inspector" };
             graphView = new MicrosceneGraphView(this);
@@ -61,11 +80,31 @@ namespace Microscenes.Editor
                     while(nodeInspector.childCount > 0)
                         nodeInspector.RemoveAt(0);
 
-                    IMGUIContainer imguiContainer = new IMGUIContainer(() =>
+                    IMGUIContainer imguiContainer = null;
+                    imguiContainer = new IMGUIContainer(() =>
                     {
                         EditorGUILayout.LabelField($"Connected Stacks: {view.connectedPorts}");
+                        EditorGUILayout.LabelField($"NodeID: {view.NodeID}");
                         
                         view.DoGUI(EditorGUIUtility.labelWidth);
+
+                        if (view.LastException is not null)
+                        {
+                            wrappedLabel ??= new(EditorStyles.label) { wordWrap = true };
+                            
+                            EditorGUILayout.Space();
+                            
+                            var exceptionLog = view.LastException.ToString();
+                            
+                            float textSize = wrappedLabel.CalcHeight(new GUIContent(exceptionLog), imguiContainer.resolvedStyle.width);
+                            textSize = Mathf.Min(500, textSize);
+                            
+                            nodeInspectorScroll = EditorGUILayout.BeginScrollView(nodeInspectorScroll, GUILayout.MaxHeight(500));
+                            
+                            EditorGUILayout.SelectableLabel(exceptionLog, wrappedLabel, GUILayout.MinHeight(textSize));
+                            
+                            EditorGUILayout.EndScrollView();
+                        }
                     });
                     imguiContainer.name = "inspector-imgui";
                     imguiContainer.AddToClassList("imgui-container");
@@ -95,47 +134,27 @@ namespace Microscenes.Editor
             var veRight = new VisualElement();
             veRight.style.flexDirection = FlexDirection.RowReverse;
 
-            ToolbarButton lockedButton = new ToolbarButton();
-            Image @lock = new Image();
-            @lock.style.maxWidth  = 16;
-            @lock.style.maxHeight = 16;
-            if (locked)
-                @lock.image = new EditorIcon("IN LockButton on act@2x");
-            else
-                @lock.image = new EditorIcon("IN LockButton@2x");
-
-            lockedButton.Add(@lock);
-            lockedButton.clicked += () =>
-            {
-                locked = !locked;
-
-                if(locked)
-                {
-                    @lock.image = new EditorIcon("IN LockButton on act@2x");
-                }
-                else
-                {
-                    @lock.image = new EditorIcon("IN LockButton@2x");
-                    OnSelectionChange(); // Also when unlocking should check for change of target
-                }
-            };
-
-            veRight.Add(lockedButton);
-
             objField = new IMGUIContainer(() =>
             {
                 EditorGUILayout.BeginHorizontal();
                 EditorGUI.BeginChangeCheck();
-                microscene = EditorGUILayout.ObjectField(microscene, typeof(Microscene), allowSceneObjects: true) as Microscene;
+                var newMicroscene = EditorGUILayout.ObjectField(microscene, typeof(Microscene), allowSceneObjects: true) as Microscene;
 
-                if (EditorGUI.EndChangeCheck())
+                if (EditorGUI.EndChangeCheck() && microscene.value != newMicroscene)
                 {
+                    Undo.RecordObject(this, "Change microscene");
+                    microscene = newMicroscene;
+                    
                     graphView.GenerateMicrosceneContent(microscene, microscene.value? new(microscene) : null);
                 }
                 
                 if(microscene.value)
                 {
-                    EditorGUILayout.LabelField(microscene.value.gameObject.scene.name);
+                    var sceneName = microscene.value.gameObject.scene.name;
+                    if(EditorUtility.IsDirty(microscene.value))
+                        sceneName += "*";
+                    
+                    EditorGUILayout.LabelField(sceneName);
                 }
 
                 EditorGUILayout.EndHorizontal();
@@ -152,11 +171,29 @@ namespace Microscenes.Editor
             EditorApplication.playModeStateChanged += RecreateOnExitPlaymode;
         }
 
+        void FlipLocked()
+        {
+            locked = !locked;
+
+            if (!locked)
+            {
+                OnSelectionChange(); // Also when unlocking should check for change of target
+            }
+        }
+
         private void OnGUI()
         {
-            if (!graphView.scene && (UnityEngine.Object)microscene != null)
+            if (!graphView.microsceneComponent && (UnityEngine.Object)microscene != null)
             {
                 graphView.GenerateMicrosceneContent(microscene, microscene.value ? new SerializedObject(microscene) : null);
+            }
+
+            if (microscene.value)
+            {
+                graphView.UpdateNodesFromReport();
+                
+                if(Application.isPlaying)
+                    Repaint();
             }
         }
 
@@ -164,7 +201,14 @@ namespace Microscenes.Editor
         private void RecreateOnExitPlaymode(PlayModeStateChange change)
         {
             if (change == PlayModeStateChange.EnteredEditMode)
-                graphView.GenerateMicrosceneContent(microscene, microscene.value ? new SerializedObject(microscene) : null);
+            {
+                graphView.GenerateMicrosceneContent(microscene,
+                    microscene.value ? new SerializedObject(microscene) : null);
+                
+                base.autoRepaintOnSceneChange = false;
+            }
+            else if(change == PlayModeStateChange.EnteredPlayMode)
+                base.autoRepaintOnSceneChange = true;
         }
 
         private void OnDisable()

@@ -44,12 +44,11 @@ namespace Microscenes.Editor
             NodePosition = newRect;
         }
 
-        public MicrosceneNodeView(MicrosceneNode binding, GraphView view) : this(view)
+        public MicrosceneNodeView(ref MicrosceneNode binding, GraphView view) : this(view)
         {
-            this.wrapper = ScriptableObject.CreateInstance<ScriptableWrapper>();
-            this.wrapper.binding = binding;
-            wrapperSerialized = new SerializedObject(wrapper);
-
+            this.binding = binding;
+            bindingEditor = UnityEditor.Editor.CreateEditor(binding);
+            
             IconsProvider.Instance.GetIconAsync(binding.GetType(), (tex) => icon = tex);
             title = NameForNode(binding.GetType());
             
@@ -62,7 +61,7 @@ namespace Microscenes.Editor
             VisualElement container = topContainer.parent;
             container.Add(CreateDivider()); 
             
-            if(wrapper.binding is INameableNode nameable)
+            if(binding is INameableNode nameable)
             {
                 title = "";
                 RefreshTitle(nameable);
@@ -83,16 +82,11 @@ namespace Microscenes.Editor
             container.Add(imgui);
         }
 
-        public MicrosceneNode binding => (MicrosceneNode)wrapper.binding;
+        public  MicrosceneNode     binding;
+        private UnityEditor.Editor bindingEditor;  
         
         public IMGUIContainer imgui;
         public StackNode      ownerStack;
-
-        /// <summary>
-        /// Allows to create SerializedObject from it to easily draw SerializedReference editor!
-        /// </summary>
-        public ScriptableWrapper wrapper;
-        public SerializedObject  wrapperSerialized;
 
         public override void OnSelected()
         {
@@ -146,38 +140,26 @@ namespace Microscenes.Editor
         
         public void DoGUI(float guiLabelWidth)
         {
-            if(wrapperSerialized is null)
+            if(!binding || !bindingEditor)
                 return;
             
-            if(!wrapperSerialized.targetObject)
-                return;
-            
-            wrapperSerialized.Update();
-            var prop = wrapperSerialized.FindProperty("binding");
-            if (prop is null)
-                return;
-
-            var height = SerializeReferenceUIDrawer.CalculateSPropertyHeight(prop);
-            if (height == 0)
-                return;
-
-            EditorGUILayout.Space(2);
-
-            var labelWidth = EditorGUIUtility.labelWidth;
+            float labelWidth = EditorGUIUtility.labelWidth;
             EditorGUIUtility.labelWidth = guiLabelWidth;
-            var rect = EditorGUILayout.GetControlRect(true, height, GUILayout.MinWidth(100));
-
+            
             EditorGUI.BeginChangeCheck();
-            SerializeReferenceUIDrawer.DrawSPropertyGUI(rect, prop);
-
-            if (Event.current.type == EventType.Repaint && wrapper.binding is INameableNode nameable)
-            {
-                RefreshTitle(nameable);
-            }
+            
+            EditorGUILayout.Space(.5f);
+            bindingEditor.OnInspectorGUI();
+            EditorGUILayout.Space(.25f);
 
             if (EditorGUI.EndChangeCheck())
             {
-                prop.serializedObject.ApplyModifiedProperties();
+                bindingEditor.serializedObject.ApplyModifiedProperties();
+            }
+
+            if (Event.current.type == EventType.Repaint && binding is INameableNode nameable)
+            {
+                RefreshTitle(nameable);
             }
 
             EditorGUIUtility.labelWidth = labelWidth;
@@ -253,6 +235,11 @@ namespace Microscenes.Editor
         }
         
         public int connectedPorts { get; private set; }
+        
+        /// <summary>
+        /// Sent during microscene execution to display this information in node inspector since console window is usually no help
+        /// </summary>
+        public Exception LastException { get ; set ; }
 
         protected void UnfreezeExpandButton()
         {
@@ -275,7 +262,7 @@ namespace Microscenes.Editor
 
         public void OnAddedToStack(StackNode node, int index)
         {
-            if (node is MicrosceneStackNode stack)
+            if (node is MicrosceneStackNodeView stack)
             {
                 ownerStack = node;
 
@@ -301,7 +288,7 @@ namespace Microscenes.Editor
 
         public void OnRemovedFromStack(StackNode node)
         {
-            if (node is MicrosceneStackNode stack)
+            if (node is MicrosceneStackNodeView stack)
             {
                 ownerStack = null;
 

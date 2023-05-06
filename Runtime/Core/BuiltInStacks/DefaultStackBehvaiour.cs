@@ -2,14 +2,10 @@
 {
     sealed class DefaultStackBehvaiour : MicrosceneStackBehaviour
     {
-        public override void Reset(MicrosceneNode[] stack)
+        public override MicrosceneStackResult Update(ref MicrosceneStackContext ctx)
         {
-        }
-
-        public override bool Update(in MicrosceneContext ctx, MicrosceneNode[] stack, ref int winnerIndex)
-        {
-            stack[0].UpdateNode(ctx);
-            return stack[0].State == MicrosceneNodeState.Finished;
+            var finishedNode = ctx.UpdateNode(0) == MicrosceneNodeState.Finished;
+            return FinishIf(finishedNode);
         }
     }
 }

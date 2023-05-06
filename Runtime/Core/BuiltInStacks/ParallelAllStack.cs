@@ -5,23 +5,17 @@
         tooltip: "Will update each child node every frame and move when all of them are completed")]
     sealed class ParallelAllStack : MicrosceneStackBehaviour
     {
-        public override void Reset(MicrosceneNode[] stack)
+        public override MicrosceneStackResult Update(ref MicrosceneStackContext ctx)
         {
-            
-        }
-
-        public override bool Update(in MicrosceneContext ctx, MicrosceneNode[] stack, ref int winnerIndex)
-        {
-            bool finished = true;
-            for (int i = 0; i < stack.Length; i++)
+            bool allNodesCompleted = true;
+            for (int i = 0; i < ctx.StackLength; i++)
             {
-                var node = stack[i];
-                node.UpdateNode(ctx);
+                var nodeState = ctx.UpdateNode(i);
 
-                finished &= node.State == MicrosceneNodeState.Finished;
+                allNodesCompleted &= nodeState == MicrosceneNodeState.Finished;
             }
             
-            return finished;
+            return FinishIf(allNodesCompleted);
         }
     }
 }

@@ -8,28 +8,28 @@ namespace Microscenes.Editor
     [Serializable]
     struct StackNodeMetadata
     {
-        public StackNodeMetadata(MicrosceneStackNode node) : this()
+        public StackNodeMetadata(MicrosceneStackNodeView nodeView) : this()
         {
-            position = node.NodePosition;
+            position = nodeView.NodePosition;
         }
         
         public int  nodeID;
         public Rect position;
 
-        public void ApplyToNode(MicrosceneStackNode node)
+        public void ApplyToNode(MicrosceneStackNodeView nodeView)
         {
             EventCallback<GeometryChangedEvent> del = null;
             
             var position = this.position;
-            node.NodePosition = this.position;
+            nodeView.NodePosition = this.position;
             
             del = (GeometryChangedEvent evt) =>
             {
-                node.SetGraphPosition(position);
-                node.UnregisterCallback<GeometryChangedEvent>(del);
+                nodeView.SetGraphPosition(position);
+                nodeView.UnregisterCallback<GeometryChangedEvent>(del);
             };
             
-            node.RegisterCallback<GeometryChangedEvent>(del);
+            nodeView.RegisterCallback<GeometryChangedEvent>(del);
         }
     }
 }

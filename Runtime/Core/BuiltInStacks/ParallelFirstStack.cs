@@ -1,29 +1,23 @@
 ﻿namespace Microscenes.Nodes
 {
-    [MicrosceneStackBehaviour(tooltip: "Will update each child node every frame and select output of a node that was completed first")]
+    [MicrosceneStackBehaviour(MicrosceneStackConnectionType.MultipleOutput, 
+        tooltip: "Will update each child node every frame and select output of a node that was completed first")]
     [NodePath("Parallel\\First Stack")]
     sealed class ParallelFirstStack : MicrosceneStackBehaviour
     {
-        public override void Reset(MicrosceneNode[] stack)
+        public override MicrosceneStackResult Update(ref MicrosceneStackContext ctx)
         {
-            
-        }
-
-        public override bool Update(in MicrosceneContext ctx, MicrosceneNode[] stack, ref int winnerIndex)
-        {
-            for (int i = 0; i < stack.Length; i++)
+            for (int i = 0; i < ctx.StackLength; i++)
             {
-                var node = stack[i];
-                node.UpdateNode(ctx);
+                var nodeState = ctx.UpdateNode(i);
 
-                if (node.State == MicrosceneNodeState.Finished)
+                if (nodeState == MicrosceneNodeState.Finished)
                 {
-                    winnerIndex = i;
-                    return true;
+                    return FinishAndSelect(i);
                 }
             }
             
-            return false;
+            return Continue();
         }
     }
 }

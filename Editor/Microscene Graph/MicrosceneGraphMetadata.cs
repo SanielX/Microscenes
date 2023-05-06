@@ -29,6 +29,13 @@ namespace Microscenes.Editor
             return -1;
         }
 
+        public void Clear()
+        {
+            nodes.Clear();
+            stackNodes.Clear();
+            stickyNotes.Clear();
+        }
+
         public bool FindStackNodeData(int nodeID, out StackNodeMetadata stack)
         {
             for (int i = 0; i < stackNodes.Count; i++)

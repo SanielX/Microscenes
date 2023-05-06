@@ -12,7 +12,7 @@ namespace Microscenes.Editor
 {
     internal class MicrosceneGraphView : AutoGraphView
     {
-        public Microscene scene;
+        public Microscene microsceneComponent;
         private SerializedObject serializedMicroscene;
 
         public EditorWindow parentWindow;
@@ -21,18 +21,45 @@ namespace Microscenes.Editor
         
         public MicrosceneGraphView(EditorWindow parent) : base()
         {
-            styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>(MicrosceneGraphViewResources.STYLE_PATH));
+            styleSheets.Add(MicrosceneGraphViewResources.LoadStyles());
 
             parentWindow = parent;
             nodeCreationRequest = CreateNode;
-
+            
+            // Turns out you can't just add Undo by serializing graph each time its changed since this callback is rather
+            // unreliable, not to mention it won't cover node GUI which uses rather weird way of drawing GUI with temporary scriptable object
+            // I have to get rid of that before Undo can work, but that would mean every node has to connect to an actual property inside Microscene component,
+            // And that is not pretty at all
             graphViewChanged += (change) =>
             {
-                if (scene)
-                    EditorUtility.SetDirty(scene);
-
+                if(isGeneratingContent) // During intialization this is going to be called a lot of times and we don't need any of these
+                    return change;
+                
+                if (microsceneComponent)
+                {
+                    Serialize();
+                    // EditorUtility.SetDirty(microsceneComponent);
+                }
+                
                 return change;
             };
+            
+            Undo.undoRedoPerformed += OnUndoRedoPerformed; 
+        }
+
+        ~MicrosceneGraphView()
+        {
+            Undo.undoRedoPerformed -= OnUndoRedoPerformed; 
+        }
+        
+        void OnUndoRedoPerformed()
+        {   
+            MarkDirtyRepaint();
+            if (microsceneComponent)
+            {
+                serializedMicroscene.Update();
+                GenerateMicrosceneContent(microsceneComponent, serializedMicroscene, changeViewPosition: false);
+            }
         }
 
         public override EventPropagation DeleteSelection()
@@ -48,15 +75,15 @@ namespace Microscenes.Editor
 
             if (!(creationContext.target is StackNode))
             {
-                AddDerivedFrom<MicrosceneNode>(nodesSearcher, "Node/");
-                AddStackTypes<MicrosceneStackBehaviour>(nodesSearcher, "Stack/");
+                AddDerivedFrom<MicrosceneNode>(nodesSearcher, "Node/", new EditorIcon("Resources/MSceneEditorIcon"));
+                AddStackTypes<MicrosceneStackBehaviour>(nodesSearcher, "Stack/", new EditorIcon("SortingGroup Icon"));
 
                 if(creationContext.target is null)
                 {
                     nodesSearcher.AddEntry("Sticky Note", userData: typeof(StickyNote), icon: new EditorIcon("Tile Icon"));
                 }
             }
-            else if(creationContext.target is MicrosceneStackNode stack)
+            else if(creationContext.target is MicrosceneStackNodeView stack)
             {
                 AddDerivedFrom<MicrosceneNode>(nodesSearcher, "Nodes/");
             }
@@ -69,38 +96,39 @@ namespace Microscenes.Editor
 
                 if (nodeType.IsSubclassOf(typeof(MicrosceneNode)))
                 {
-                    var action = (MicrosceneNode)Activator.CreateInstance(nodeType);
-                    node = new MicrosceneNodeView(action, this) { NodeID = -1 };
+                    var action = (MicrosceneNode)ScriptableObject.CreateInstance(nodeType);
+                    node = new MicrosceneNodeView(ref action, this) { NodeID = ++maxNodeID };
                 }
                 else if (nodeType.IsSubclassOf(typeof(MicrosceneStackBehaviour)))
                 {
                     var behaviour = (MicrosceneStackBehaviour)Activator.CreateInstance(nodeType);
-                    node = new MicrosceneStackNode(behaviour, this) { NodeID = -1 };
+                    node = new MicrosceneStackNodeView(behaviour, this) { NodeID = ++maxNodeID };
                 } 
                 else if(nodeType == typeof(StickyNote))
                 {
                     var stickyNode = new StickyNote() { title = "Note", fontSize = StickyNoteFontSize.Small };
                     AddElement(stickyNode);
                     stickyNode.SetGraphPosition(TransfromToLocal(ctx.screenMousePosition));
-
+                    // graphViewChanged?.Invoke(new GraphViewChange());
                     return;
                 }
 
                 if (node is null)
                     return;
-
-                EditorUtility.SetDirty(scene);
+                
+                EditorUtility.SetDirty(microsceneComponent);
                 AddElement(node);
-
+                
                 Vector2 graphMousePosition = TransfromToLocal(ctx.screenMousePosition);
                 Rect newNodePos = node.GetPosition();
                 newNodePos.position = graphMousePosition;
                 
-                node.SetGraphPosition(newNodePos);
+                if(node is MicrosceneNodeView v) v.NodePosition = newNodePos;
+                else if(node is MicrosceneStackNodeView s) s.NodePosition = newNodePos;
 
                 if (creationContext.target != null)
                 {
-                    if (creationContext.target is StackNode stackNode)
+                    if (creationContext.target is MicrosceneStackNodeView stackNode)
                     {
                         List<ISelectable> selectables = new List<ISelectable>();
                         selectables.Add(node);
@@ -119,6 +147,11 @@ namespace Microscenes.Editor
                         }
                     }
                 }
+                
+                if(creationContext.target is not StackNode)
+                    node.SetGraphPosition(newNodePos);
+                
+                graphViewChanged?.Invoke(new GraphViewChange());
             };
 
             var searchWindowCtx = new SearchWindowContext(creationContext.screenMousePosition);
@@ -135,10 +168,10 @@ namespace Microscenes.Editor
             return createPos;
         }
 
-        void AddStackTypes<T>(GenericSearchBuilder builder, string prefix)
+        void AddStackTypes<T>(GenericSearchBuilder builder, string prefix, Texture defaultIcon = null)
         {
             var microprecondTypes = TypeCache.GetTypesDerivedFrom<T>();
-            var ctxs = this.scene.context;
+            var ctxs = this.microsceneComponent.context;
 
             foreach (var type in microprecondTypes)
             {
@@ -149,7 +182,7 @@ namespace Microscenes.Editor
                 // var isSerializable = type.GetCustomAttribute<SerializableAttribute>() is not null;
                 // if(!isSerializable)
                 //     continue;
-
+                
                 var nodeAttr = type.GetCustomAttribute<MicrosceneStackBehaviourAttribute>(inherit: false);
                 if (nodeAttr is null)
                     continue;
@@ -167,14 +200,17 @@ namespace Microscenes.Editor
                 else
                     path = attr.Path;
 
-                builder.AddEntry(prefix + path, userData: type, icon: IconsProvider.Instance.GetIconForType(type));
+                var iconForType   = IconsProvider.Instance.GetIconForType(type);
+                    iconForType ??= defaultIcon;
+                
+                builder.AddEntry(prefix + path, userData: type, icon: iconForType);
             }
         }
 
-        void AddDerivedFrom<T>(GenericSearchBuilder builder, string prefix)
+        void AddDerivedFrom<T>(GenericSearchBuilder builder, string prefix, Texture defaultIcon = default)
         {
             var microprecondTypes = TypeCache.GetTypesDerivedFrom<T>();
-            var ctxs = this.scene.context;
+            var ctxs = this.microsceneComponent.context;
 
             foreach (var type in microprecondTypes)
             {
@@ -203,27 +239,42 @@ namespace Microscenes.Editor
                 else
                     path = attr.Path;
 
-                builder.AddEntry(prefix + path, userData: type, icon: IconsProvider.Instance.GetIconForType(type));
+                var iconForType   = IconsProvider.Instance.GetIconForType(type);
+                    iconForType ??= defaultIcon;
+                    
+                builder.AddEntry(prefix + path, userData: type, icon: iconForType);
             }
         }
- 
+        
+        bool isGeneratingContent;
+        int maxNodeID;
         // TODO: Make serialization & deserialization less of a mess
-        // Most of this is just dancing around serialization nesting issue
-        public void GenerateMicrosceneContent(Microscene scene, SerializedObject serializedMicroscene)
+        public void GenerateMicrosceneContent(Microscene scene, SerializedObject serializedMicroscene, bool changeViewPosition = true)
         {
+            maxNodeID = 0;
             ClearElements();
-            this.scene = scene;
+            this.microsceneComponent = scene;
             this.serializedMicroscene = serializedMicroscene;
 
             if (!scene)
                 return;
+            
+            isGeneratingContent = true;
 
             MicrosceneGraphMetadata graphMeta = new MicrosceneGraphMetadata();
             if (!string.IsNullOrEmpty(scene.m_MetadataJson))
                 EditorJsonUtility.FromJsonOverwrite(scene.m_MetadataJson, graphMeta);
             
-            var entryView     = new EntryMicrosceneNodeView(this, "Entry") { NodePosition = graphMeta.entryPosition };
-            var quitEntryView = new EntryMicrosceneNodeView(this, "Exit")  { NodePosition = graphMeta.quitEntryPosition };
+            var entryView     = new EntryMicrosceneNodeView(this, "Entry")
+            {
+                NodePosition = graphMeta.entryPosition,
+                NodeID = int.MinValue,
+            };
+            var quitEntryView = new EntryMicrosceneNodeView(this, "Exit")
+            {
+                NodePosition = graphMeta.quitEntryPosition,
+                NodeID = int.MinValue+1,
+            };
             
             AddElement(entryView);
             entryView.SetGraphPosition(graphMeta.entryPosition);
@@ -231,7 +282,7 @@ namespace Microscenes.Editor
             AddElement(quitEntryView);
             quitEntryView.SetGraphPosition(graphMeta.quitEntryPosition);
 
-            if (graphMeta.cameraPosition != Vector3.zero)
+            if (changeViewPosition && graphMeta.cameraPosition != Vector3.zero)
             {
                 base.UpdateViewTransform(graphMeta.cameraPosition, graphMeta.cameraScale);
             }
@@ -244,31 +295,39 @@ namespace Microscenes.Editor
             for (int i = 0; i < scene.m_AllEntries.Length; i++)
             {
                 var entry = scene.m_AllEntries[i];
+                maxNodeID = Mathf.Max(entry.NodeID, maxNodeID);
 
                 if (graphMeta.FindStackNodeData(entry.NodeID, out var stackMeta))
                 {
-                    var stackNode = new MicrosceneStackNode(entry.stackBehaviour, this);
+                    var stackNode = new MicrosceneStackNodeView(entry.stackBehaviour, this);
+                    stackNode.NodeID = entry.NodeID;
+
                     stackMeta.ApplyToNode(stackNode);
                     
                     AddElement(stackNode);
 
-                    foreach (var node in entry.nodeStack)
+                    for (var iNode = 0; iNode < entry.nodeStack.Length; iNode++)
                     {
-                        if(node is null) // Can happen if type was renamed and now SeriaizeReference is broken :(
+                        ref var node = ref entry.nodeStack[iNode];
+                        if (node is null) // Can happen if type was renamed and now SeriaizeReference is broken :(
                             continue;
-                        
-                        var nodeView = new MicrosceneNodeView(node, this);
-                        
+
+                        var nodeView = new MicrosceneNodeView(ref node, this);
+                        nodeView.NodeID = entry.NodeID;
+
                         stackNode.AddElement(nodeView);
-                        nodeView.OnAddedToStack(stackNode, stackNode.childCount-1);
+                        nodeView.OnAddedToStack(stackNode, stackNode.childCount - 1);
                     }
-                    
+
                     entryMap.Add(entry, stackNode);
                 }
                 else if (entry.nodeStack.Length > 0 && graphMeta.FindNodeData(entry.NodeID, out var nodeMeta))
                 {
-                    var node = entry.nodeStack[0];
-                    var nodeView = new MicrosceneNodeView(node, this);
+                    ref var node = ref entry.nodeStack[0];
+                    
+                    var nodeView = new MicrosceneNodeView(ref node, this);
+                    nodeView.NodeID = entry.NodeID;
+                    
                     nodeMeta.ApplyToNode(nodeView);
                     
                     AddElement(nodeView);
@@ -295,6 +354,9 @@ namespace Microscenes.Editor
                 node.RefreshExpandedState();
             }
             
+            
+            isGeneratingContent = false;
+            
             void connectOutputs(MicrosceneNodeEntry entry, IConnectable connectable)
             {
                 if(entry is null)
@@ -317,28 +379,36 @@ namespace Microscenes.Editor
                 }
             }
         }
- 
+        
+        private static DefaultStackBehvaiour                         poolStackBehaviour = new();
+        private static MicrosceneGraphMetadata                       pooledGraphMeta    = new();
+        private static Dictionary<GraphElement, MicrosceneNodeEntry> pooledNodesMap     = new(64);
+        private static List<MicrosceneNode>                          pooledNodeList     = new(64);
+        private static HashSet<GraphElement>                         pooledElementSet   = new(64);
+        private static List<MicrosceneNodeEntry>                     pooledConnections  = new(16);
         public void Serialize()
         {
-            if(!scene)
+            if(!microsceneComponent)
                 return;
             
             serializedMicroscene.Update();
+            Undo.RecordObject(microsceneComponent, "Save microscene component");
             // This is shared by all single nodes, behvaiour that just updates it and completes when 
             // node[0] is completed
-            DefaultStackBehvaiour defaultStackBehvaiour = new();
+            DefaultStackBehvaiour defaultStackBehvaiour = poolStackBehaviour;
             
-            MicrosceneGraphMetadata graphMeta = new MicrosceneGraphMetadata();
+            MicrosceneGraphMetadata graphMeta = pooledGraphMeta;
+            graphMeta.Clear();
             graphMeta.cameraPosition = base.viewTransform.position;
             graphMeta.cameraScale    = base.viewTransform.scale;
             
             // Associate a node entry with graph element
-            Dictionary<GraphElement, MicrosceneNodeEntry> nodesMap = new();
-            List<MicrosceneNode> pooledNodeList  = new(16);
+            Dictionary<GraphElement, MicrosceneNodeEntry> nodesMap = pooledNodesMap;
+            nodesMap.Clear();
             
-            int nodeID = -1;
-            
-            HashSet<GraphElement> pooledElementSet = new(16);
+            pooledNodeList.Clear();
+            pooledElementSet.Clear();
+            pooledConnections.Clear();
 
             // Since graph may have loops and recursion we need to first create base building blocks
             // e.g. individual nodes, next step is going to be making them reference each other
@@ -351,7 +421,7 @@ namespace Microscenes.Editor
                     continue;
                 }
 
-                if (element is MicrosceneStackNode stack)
+                if (element is MicrosceneStackNodeView stack)
                 {
                     IConnectable connectableStack = stack;
                     pooledNodeList.Clear();
@@ -359,7 +429,7 @@ namespace Microscenes.Editor
                     foreach (var stackNode in stack.Children())
                     {
                         if(stackNode is MicrosceneNodeView node)
-                            pooledNodeList.Add(node.wrapper.binding as MicrosceneNode);
+                            pooledNodeList.Add(node.binding as MicrosceneNode);
                     }
                     
                     int connectionsCount = CountConnectedStacks(pooledElementSet, connectableStack);
@@ -367,7 +437,7 @@ namespace Microscenes.Editor
                     MicrosceneNodeEntry nodeEntry = new()
                     {
                         stackBehaviour            = (MicrosceneStackBehaviour)stack.wrapper.binding,
-                        NodeID                    = ++nodeID,
+                        NodeID                    = stack.NodeID,
                         InputPortsConnectionCount = connectionsCount,
                         nodeStack                 = pooledNodeList.ToArray(),
                     };
@@ -375,22 +445,22 @@ namespace Microscenes.Editor
                     nodesMap.Add(stack, nodeEntry);
                     graphMeta.stackNodes.Add(new(stack)
                     {
-                        nodeID = nodeID,
+                        nodeID = nodeEntry.NodeID,
                     });
                     
                     continue;
                 }
 
-                if (element is MicrosceneNodeView nodeView && nodeView.ownerStack is null && nodeView.wrapper is not null)
+                if (element is MicrosceneNodeView nodeView && nodeView.ownerStack is null && nodeView.binding)
                 {
                     pooledNodeList.Clear();
-                    pooledNodeList.Add(nodeView.wrapper.binding as MicrosceneNode);
+                    pooledNodeList.Add(nodeView.binding);
                     int connectionsCount = CountConnectedStacks(pooledElementSet, nodeView);
                     
                     MicrosceneNodeEntry nodeEntry = new()
                     {
                         stackBehaviour = defaultStackBehvaiour,
-                        NodeID    = ++nodeID,
+                        NodeID    = nodeView.NodeID,
                         nodeStack = pooledNodeList.ToArray(),
                         InputPortsConnectionCount = connectionsCount,
                     };
@@ -398,12 +468,11 @@ namespace Microscenes.Editor
                     nodesMap.Add(nodeView, nodeEntry);
                     graphMeta.nodes.Add(new(nodeView)
                     {
-                        nodeID = nodeID,
+                        nodeID = nodeEntry.NodeID,
                     });
                 }
             }
             
-            List<MicrosceneNodeEntry> pooledConnections    = new(16);
             foreach (var element in allGraphElements)
             {
                 if (nodesMap.TryGetValue(element, out var entry) && element is IConnectable connectable)
@@ -422,24 +491,24 @@ namespace Microscenes.Editor
                         connections = connectionMatrix,
                     };
                     
-                    // TODO: This is stupid
+                    // FIXME: This is stupid
                     if (entryNode.ID == "Entry")
                     {
                         graphMeta.entryPosition = entryNode.NodePosition;
-                        scene.m_Root = root;
+                        microsceneComponent.m_Root = root;
                     }
                     else
                     {
                         graphMeta.quitEntryPosition = entryNode.NodePosition;
-                        scene.m_QuitRoot = root;
+                        microsceneComponent.m_QuitRoot = root;
                     }
                 }
             }
             
-            scene.m_MetadataJson = EditorJsonUtility.ToJson(graphMeta, prettyPrint: true);
-            scene.m_AllEntries = nodesMap.Values.ToArray();
+            microsceneComponent.m_MetadataJson = EditorJsonUtility.ToJson(graphMeta, prettyPrint: true);
+            microsceneComponent.m_AllEntries   = nodesMap.Values.ToArray();
             
-            EditorUtility.SetDirty(scene);
+            EditorUtility.SetDirty(microsceneComponent);
             serializedMicroscene.Update();
             serializedMicroscene.ApplyModifiedProperties();
             
@@ -484,7 +553,7 @@ namespace Microscenes.Editor
                 if (outputNode is null)
                     continue;
 
-                if (outputNode is MicrosceneStackNode s && pooledElementSet.Add(s))
+                if (outputNode is MicrosceneStackNodeView s && pooledElementSet.Add(s))
                     connectionsCount++;
                 else if (outputNode is MicrosceneNodeView connectedNodeView)
                 {
@@ -500,6 +569,83 @@ namespace Microscenes.Editor
             }
 
             return connectionsCount;
+        }
+
+        public void UpdateNodesFromReport()
+        {
+            if (!Application.isPlaying)
+            {
+                foreach (var node in base.nodes)
+                {
+                    if (node is MicrosceneStackNodeView stackView)
+                    {
+                        foreach (var child in stackView.Children())
+                        {
+                            SetVisualElementStyleFromReport(child, default);
+                        }
+                    }
+                    else if (node is MicrosceneNodeView nodeView)
+                    {
+                        SetVisualElementStyleFromReport(nodeView, default);
+                    }
+                }
+
+                return;
+            }
+
+            foreach (var report in microsceneComponent._nodeReports)
+            {
+                foreach (var node in base.nodes)
+                {
+                    if (node is MicrosceneNodeView nodeView)
+                    {
+                        if (nodeView.binding == report.Key)
+                        {
+                            SetVisualElementStyleFromReport(nodeView, report.Value);
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        void SetVisualElementStyleFromReport(VisualElement node, in Microscene.NodeReport report)
+        {
+            switch (report.result)
+            {
+                case Microscene.NodeReportResult.None: {
+                    node.RemoveFromClassList("node-updating");
+                    node.RemoveFromClassList("node-finished");
+                    node.RemoveFromClassList("node-crashed");
+                }
+                    break;
+                
+                case Microscene.NodeReportResult.Updating: {
+                    node.AddToClassList("node-updating");
+                    node.RemoveFromClassList("node-finished");
+                    node.RemoveFromClassList("node-crashed");
+                }
+                    break;
+
+                case Microscene.NodeReportResult.Succeded:
+                    node.RemoveFromClassList("node-updating");
+                    node.AddToClassList("node-finished");
+                    node.RemoveFromClassList("node-crashed");
+
+                    break;
+                
+                case Microscene.NodeReportResult.Crashed:
+                    node.RemoveFromClassList("node-updating");
+                    node.RemoveFromClassList("node-finished");
+                    node.AddToClassList("node-crashed");
+                    break;
+                    
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+            
+            if(node is MicrosceneNodeView view)
+                view.LastException = report.exception;
         }
     }
 }

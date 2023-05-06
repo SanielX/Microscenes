@@ -1,19 +1,20 @@
 ﻿namespace Microscenes.Nodes
 {
-    [MicrosceneStackBehaviour(tooltip: "Selects child node at random")]
+    [MicrosceneStackBehaviour(MicrosceneStackConnectionType.MultipleOutput,
+        tooltip: "Selects child node at random")]
     sealed class RandomStack : MicrosceneStackBehaviour
     {
         int nodeIndex = 0;
         
-        public override void Reset(MicrosceneNode[] stack)
+        public override void Start(ref MicrosceneStackContext ctx)
         {
-            nodeIndex = UnityEngine.Random.Range(0, stack.Length);
+            nodeIndex = UnityEngine.Random.Range(0, ctx.StackLength);
         }
 
-        public override bool Update(in MicrosceneContext ctx, MicrosceneNode[] stack, ref int winnerIndex)
+        public override MicrosceneStackResult Update(ref MicrosceneStackContext ctx)
         {
-            stack[nodeIndex].UpdateNode(ctx);
-            return stack[nodeIndex].State == MicrosceneNodeState.Finished;
+            var finishedNode = ctx.UpdateNode(nodeIndex) == MicrosceneNodeState.Finished;
+            return FinishIf(finishedNode);
         }
     }
 }
