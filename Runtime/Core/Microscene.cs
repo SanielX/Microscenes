@@ -156,7 +156,7 @@ namespace Microscenes
         /// </summary>
         public void StartExecutingMicroscene(object customData)
         {
-#if UNITY_ASSERTIONS
+#if UNITY_EDITOR
             _nodeReports.Clear();
             if (customData != null && context is null)
                 Debug.LogWarning("Microscene has no context but is invoked with non null custom data", this);
